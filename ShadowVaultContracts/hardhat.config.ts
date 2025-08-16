@@ -19,25 +19,25 @@ const hardhatConfig: HardhatUserConfig = {
     hardhat: {
       chainId: 31337,
     },
-    baseSepolia: {
-      url: process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org",
+    zircuitGarfieldTestnet: {
+      url: process.env.ZIRCUIT_RPC_URL || "https://garfield-testnet.zircuit.com",
       accounts: process.env.PRIVATE_KEY && process.env.PRIVATE_KEY.length === 64 
         ? [process.env.PRIVATE_KEY] 
         : [],
-      chainId: 84532,
+      chainId: 48898,
     },
   },
   etherscan: {
     apiKey: {
-      baseSepolia: process.env.BASESCAN_API_KEY || "",
+      zircuitGarfieldTestnet: "abc", // Zircuit doesn't require API key for verification
     },
     customChains: [
       {
-        network: "baseSepolia",
-        chainId: 84532,
+        network: "zircuitGarfieldTestnet",
+        chainId: 48898,
         urls: {
-          apiURL: "https://api-sepolia.basescan.org/api",
-          browserURL: "https://sepolia.basescan.org/",
+          apiURL: "https://explorer.garfield-testnet.zircuit.com/api",
+          browserURL: "https://explorer.garfield-testnet.zircuit.com/",
         },
       },
     ],

@@ -4,8 +4,8 @@ import React from 'react'
 import { PrivyProvider as BasePrivyProvider } from '@privy-io/react-auth'
 import { WagmiProvider } from '@privy-io/wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { baseSepolia } from 'viem/chains'
 import { createConfig, http } from 'wagmi'
+import { defineChain } from 'viem'
 
 interface PrivyProviderProps {
   children: React.ReactNode
@@ -13,10 +13,33 @@ interface PrivyProviderProps {
 
 const queryClient = new QueryClient()
 
+// Zircuit Garfield Testnet configuration
+const zircuitGarfieldTestnet = defineChain({
+  id: 48898,
+  name: 'Zircuit Garfield Testnet',
+  nativeCurrency: {
+    decimals: 18,
+    name: 'Ether',
+    symbol: 'ETH',
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://garfield-testnet.zircuit.com'],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'Zircuit Garfield Explorer',
+      url: 'https://explorer.garfield-testnet.zircuit.com',
+    },
+  },
+  testnet: true,
+})
+
 const wagmiConfig = createConfig({
-  chains: [baseSepolia],
+  chains: [zircuitGarfieldTestnet],
   transports: {
-    [baseSepolia.id]: http(),
+    [zircuitGarfieldTestnet.id]: http(),
   },
 })
 
@@ -44,7 +67,7 @@ export function PrivyProvider({ children }: PrivyProviderProps) {
             createOnLogin: 'users-without-wallets',
           },
           loginMethods: ['email', 'sms', 'wallet'],
-          supportedChains: [baseSepolia],
+          supportedChains: [zircuitGarfieldTestnet],
         }}
       >
         <QueryClientProvider client={queryClient}>

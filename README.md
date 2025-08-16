@@ -6,7 +6,7 @@ Unlike traditional password managers (LastPass, 1Password) that centralize encry
 
 - **Decentralized custody** — credentials are encrypted client-side and only ciphertext is stored on-chain.  
 - **Zero-Knowledge verification** — users can generate proofs that their passwords meet security policies without exposing them.  
-- **Cross-chain consistency** — verified proofs are linked across chains using Hyperlane, bridging storage (Base) and verification (Zircuit).  
+- **Zircuit Integration** — verified proofs are stored on Zircuit's advanced testnet with EIP-7702 compatibility and Pectra opcodes.  
 
 ⚡ **Hackathon Status**: This repository contains the MVP implementation for ETH Global. Technical direction, architecture, and features will evolve after the event.  
 
@@ -63,7 +63,7 @@ Out of MVP scope (roadmap candidates):
 ### 2.4 Why Web3 for a password manager?
 A decentralized approach solves multiple pain points:
 
-- **Custody separation:** Only ciphertext is stored on-chain (Base). There is no central vault provider to breach.
+- **Custody separation:** Only ciphertext is stored locally and on-chain. There is no central vault provider to breach.
 - **Public verifiability:** On-chain verification (Zircuit) produces a durable, tamper-evident record of compliance.
 - **Extensibility:** Credentials and proofs become composable building blocks for future protocols (e.g., gated access, automated policy checks).
 - **Credible neutrality:** Verification rules and results are transparent; anyone can audit the same contracts.
@@ -82,12 +82,11 @@ ZKPs are the missing link between **privacy** and **assurance**:
 
 *(Roadmap: entropy scoring, breached-password set membership checks via hashed datasets, adaptive policies.)*
 
-### 2.6 Why cross-chain (Base ↔ Zircuit via Hyperlane)?
-- **Separation of concerns:**  
-  - **Base**: efficient storage and indexing of ciphertext envelopes in SQL.  
-  - **Zircuit**: specialized environment for verifying ZK proofs and recording commitments.
-- **Consistency guarantees:** Hyperlane links the storage row (on Base) with the verified commitment (on Zircuit), ensuring the ciphertext and the proof refer to the same underlying secret.
-- **Future flexibility:** Decoupled layers allow upgrades or migrations without rewriting the entire stack.
+### 2.6 Why Zircuit for verification?
+- **Specialized ZK environment:** Zircuit provides an optimized testnet for verifying ZK proofs and recording commitments.
+- **Advanced compatibility:** Support for Cancun opcodes and upcoming Pectra features, including EIP-7702 readiness.
+- **Future-proof architecture:** Zircuit's enhanced prover and dedicated block explorer provide robust infrastructure for ZK applications.
+- **Testnet innovation:** Access to cutting-edge features on the Garfield testnet that will shape the future of ZK verification.
 
 ### 2.7 Design principles
 - **Local-first security:** Argon2id for key derivation; AES-256-GCM for encryption; per-entry DEKs wrapped under a KEK.

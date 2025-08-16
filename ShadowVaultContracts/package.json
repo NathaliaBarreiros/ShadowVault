@@ -5,9 +5,9 @@
   "scripts": {
     "build": "npx hardhat compile",
     "test": "npx hardhat test",
-    "deploy:baseSepolia": "npx hardhat run scripts/deploy.ts --network baseSepolia",
-    "verify:baseSepolia": "npx hardhat run scripts/verify.ts --network baseSepolia",
-    "interact:baseSepolia": "npx hardhat run scripts/interact.ts --network baseSepolia",
+    "deploy:zircuit": "npx hardhat run scripts/deploy.ts --network zircuitGarfieldTestnet",
+    "verify:zircuit": "npx hardhat run scripts/verify.ts --network zircuitGarfieldTestnet",
+    "interact:zircuit": "npx hardhat run scripts/interact.ts --network zircuitGarfieldTestnet",
     "clean": "npx hardhat clean",
     "coverage": "npx hardhat coverage",
     "gas-report": "REPORT_GAS=true npx hardhat test"
