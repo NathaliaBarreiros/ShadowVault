@@ -11,11 +11,13 @@
 
 ### 🔗 Links
 - **Explorer**: https://explorer.garfield-testnet.zircuit.com/address/0xFfD385c7BC7645846449363825a31435DA6d2095
+- **Verified Source Code**: https://repo.sourcify.dev/contracts/full_match/48898/0xFfD385c7BC7645846449363825a31435DA6d2095/
 - **Network RPC**: https://garfield-testnet.zircuit.com
 - **Chain ID**: 48898
 
 ### ✅ Verified Functionality
 - Contract deployment successful
+- **Source code verified on Sourcify** ✅
 - Owner permissions working
 - Entry storage and retrieval tested
 - Event emission confirmed

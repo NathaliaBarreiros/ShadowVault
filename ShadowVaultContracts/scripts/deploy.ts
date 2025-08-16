@@ -64,10 +64,12 @@ async function main() {
 
   console.log("\n🔗 Next Steps:");
   console.log("==============");
-  console.log("1. Verify contract on Zircuit Explorer:");
+  console.log("1. Verify contract on Sourcify (recommended for Zircuit):");
   console.log(`   npx hardhat verify --network zircuitGarfieldTestnet ${contractAddress} ${deployer.address}`);
-  console.log("2. Update frontend configuration with contract address");
-  console.log("3. Test contract functionality");
+  console.log("2. View verified source code on Sourcify:");
+  console.log(`   https://repo.sourcify.dev/contracts/full_match/48898/${contractAddress}/`);
+  console.log("3. Update frontend configuration with contract address");
+  console.log("4. Test contract functionality");
 
   return { shadowVault, deploymentInfo };
 }
