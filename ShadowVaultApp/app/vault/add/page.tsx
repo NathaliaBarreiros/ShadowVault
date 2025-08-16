@@ -26,7 +26,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { deriveEncryptionKeyFromSignature } from "@/lib/encryption"
+import { deriveEncryptionKeyFromSignature, createVaultItemCipher } from "@/lib/encryption"
 
 interface NetworkOption {
   id: string
@@ -201,14 +201,19 @@ export default function AddPasswordPage() {
       }
       console.log('[AddPassword] Payload to encrypt:', payload)
       
-      // TODO: Step 3: Encrypt payload with derived key (AES-256-GCM)
+      // Step 3: Encrypt payload and create VaultItemCipher
+      const vaultItem = await createVaultItemCipher(payload, rawKey)
+      console.log('[AddPassword] VaultItemCipher created successfully!')
+      console.log('[AddPassword] Encrypted password length:', vaultItem.cipher.length)
+      console.log('[AddPassword] IV length:', vaultItem.iv.length)
+      
       // TODO: Step 4: Generate Poseidon commitment (SHA-256 for now)
       // TODO: Step 5: Store ciphertext envelope
       // TODO: Step 6: Generate ZK proof of password strength
       // TODO: Step 7: Submit to Zircuit contract
       
-      // Simulate the full process for now
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      // Simulate remaining steps for now
+      await new Promise((resolve) => setTimeout(resolve, 1000))
       
       console.log('[AddPassword] Password saved successfully!')
       

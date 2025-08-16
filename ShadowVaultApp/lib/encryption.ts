@@ -2,6 +2,23 @@
 const VAULT_ENCRYPTION_DOMAIN = 'vault-encryption-fixed'
 const HKDF_INFO = 'sv:hkdf:v1'
 
+// VaultItemCipher interface for encrypted password storage
+export interface VaultItemCipher {
+  v: number;                    // schema version
+  site: string;                 // service name (plaintext)
+  username: string;             // username (plaintext) 
+  cipher: string;               // base64 AES-GCM ciphertext (password encriptado)
+  iv: string;                   // 12-byte IV (base64)
+  encryptionKeyHash: string;    // SHA-256 de la clave derivada (para verificación)
+  meta: {
+    url?: string;
+    notes?: string;
+    category: string;
+    network: string;
+    timestamp: string;
+  }
+}
+
 export function hexToBytes(hex: string): Uint8Array {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex
   if (clean.length % 2 !== 0) throw new Error('Invalid hex string length')
@@ -86,6 +103,96 @@ export async function deriveEncryptionKeyFromSignature(
   console.log('[Encryption] Final key derived, length:', rawKey.length)
   
   return { rawKey, base64Key: bytesToBase64(rawKey) }
+}
+
+export async function encryptPasswordWithAES(
+  password: string,
+  encryptionKey: Uint8Array
+): Promise<{ cipher: string; iv: string }> {
+  console.log('[Encryption] Starting AES-GCM encryption...')
+  
+  // Generate random IV (12 bytes for AES-GCM)
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  console.log('[Encryption] Generated IV (first 8 bytes):', Array.from(iv.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(''))
+  
+  // Convert password to bytes
+  const passwordBytes = utf8ToBytes(password)
+  console.log('[Encryption] Password bytes length:', passwordBytes.length)
+  
+  // Import encryption key for AES-GCM
+  const aesKey = await crypto.subtle.importKey(
+    'raw',
+    encryptionKey,
+    'AES-GCM',
+    false,
+    ['encrypt']
+  )
+  
+  // Encrypt password with AES-GCM
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: iv },
+    aesKey,
+    passwordBytes
+  )
+  
+  const ciphertext = new Uint8Array(encrypted)
+  console.log('[Encryption] Ciphertext length:', ciphertext.length)
+  
+  return {
+    cipher: bytesToBase64(ciphertext),
+    iv: bytesToBase64(iv)
+  }
+}
+
+export async function createVaultItemCipher(
+  payload: {
+    site: string;
+    username: string;
+    password: string;
+    url?: string;
+    notes?: string;
+    category: string;
+    network: string;
+  },
+  encryptionKey: Uint8Array
+): Promise<VaultItemCipher> {
+  console.log('[Encryption] Creating VaultItemCipher...')
+  
+  // Encrypt the password
+  const { cipher, iv } = await encryptPasswordWithAES(payload.password, encryptionKey)
+  
+  // Generate hash of encryption key for verification
+  const encryptionKeyHash = await sha256Bytes(encryptionKey)
+  const encryptionKeyHashHex = Array.from(encryptionKeyHash).map(b => b.toString(16).padStart(2, '0')).join('')
+  console.log('[Encryption] Encryption key hash:', encryptionKeyHashHex)
+  
+  // Create VaultItemCipher
+  const vaultItem: VaultItemCipher = {
+    v: 1, // schema version
+    site: payload.site,
+    username: payload.username,
+    cipher: cipher,
+    iv: iv,
+    encryptionKeyHash: encryptionKeyHashHex,
+    meta: {
+      url: payload.url,
+      notes: payload.notes,
+      category: payload.category,
+      network: payload.network,
+      timestamp: new Date().toISOString()
+    }
+  }
+  
+  console.log('[Encryption] VaultItemCipher created:', {
+    v: vaultItem.v,
+    site: vaultItem.site,
+    username: vaultItem.username,
+    cipherLength: vaultItem.cipher.length,
+    ivLength: vaultItem.iv.length,
+    meta: vaultItem.meta
+  })
+  
+  return vaultItem
 }
 
 
