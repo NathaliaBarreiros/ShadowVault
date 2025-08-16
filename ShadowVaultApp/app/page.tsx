@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Switch } from "@/components/ui/switch"
+import { toast } from "@/hooks/use-toast"
 import {
   Shield,
   Activity,
@@ -28,21 +29,27 @@ import Link from "next/link"
 export default function ShadowVaultDashboard() {
   const [securityScore] = useState(94)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [securityToggles, setSecurityToggles] = useState({
+    threatMonitoring: true,
+    autoUpdates: true,
+    breachDetection: true,
+    aiAnalysis: true,
+  })
 
   const recentActivity = [
     {
       id: 1,
-      type: "cross-chain",
-      action: "Retrieved Netflix password",
+      type: "PASSWORD_DECRYPTED_LOCAL",
+      action: "Decrypted Netflix password locally",
       time: "2 min ago",
       status: "success",
-      chains: ["Base", "Bridge"],
+      chains: ["Base"],
       severity: "success",
     },
     {
       id: 2,
-      type: "ai-security",
-      action: "Detected GitHub password in breach database",
+      type: "ZK_PROOF_VERIFIED",
+      action: "Proof verified on Zircuit",
       time: "15 min ago",
       status: "warning",
       chains: ["Zircuit"],
@@ -50,8 +57,8 @@ export default function ShadowVaultDashboard() {
     },
     {
       id: 3,
-      type: "password-update",
-      action: "Auto-updated LinkedIn password",
+      type: "ENCRYPTED_STORED_BASE",
+      action: "Stored encrypted item on Base",
       time: "1 hr ago",
       status: "success",
       chains: ["Base"],
@@ -59,11 +66,11 @@ export default function ShadowVaultDashboard() {
     },
     {
       id: 4,
-      type: "cross-chain",
-      action: "Synced vault to Polygon network",
+      type: "BRIDGED_METADATA",
+      action: "Linked Base ↔ Zircuit",
       time: "3 hr ago",
       status: "success",
-      chains: ["Base", "Bridge"],
+      chains: ["Bridge"],
       severity: "info",
     },
   ]
@@ -78,14 +85,13 @@ export default function ShadowVaultDashboard() {
   const networks = [
     { name: "Base", purpose: "Storage", status: "active", latency: "45ms" },
     { name: "Zircuit", purpose: "Verify", status: "active", latency: "32ms" },
-    { name: "Hyperlane", purpose: "Bridge", status: "active", latency: "78ms" },
   ]
 
   const securityStatus = [
-    { label: "Threat Monitoring", status: "Active", enabled: true },
-    { label: "Auto-Updates", status: "Enabled", enabled: true },
-    { label: "Breach Detection", status: "Protected", enabled: true },
-    { label: "AI Analysis", status: "Running", enabled: true },
+    { key: "threatMonitoring", label: "Threat Monitoring" },
+    { key: "autoUpdates", label: "Auto-Updates" },
+    { key: "breachDetection", label: "Breach Detection" },
+    { key: "aiAnalysis", label: "AI Analysis" },
   ]
 
   const getStatusColor = (severity: string) => {
@@ -101,6 +107,19 @@ export default function ShadowVaultDashboard() {
     }
   }
 
+  const getColorRail = (severity: string) => {
+    switch (severity) {
+      case "success":
+        return "border-l-green-500"
+      case "warning":
+        return "border-l-amber-500"
+      case "info":
+        return "border-l-blue-500"
+      default:
+        return "border-l-gray-500"
+    }
+  }
+
   const getStatusIcon = (severity: string) => {
     switch (severity) {
       case "success":
@@ -112,6 +131,21 @@ export default function ShadowVaultDashboard() {
       default:
         return <Clock className={`w-4 h-4 ${getStatusColor(severity)}`} />
     }
+  }
+
+  const copyWalletAddress = () => {
+    navigator.clipboard.writeText("0x1234567890abcdef1234567890abcdef12345678")
+    toast({
+      title: "Copied!",
+      description: "Wallet address copied to clipboard",
+    })
+  }
+
+  const handleSecurityToggle = (key: string) => {
+    setSecurityToggles((prev) => ({
+      ...prev,
+      [key]: !prev[key as keyof typeof prev],
+    }))
   }
 
   return (
@@ -129,7 +163,6 @@ export default function ShadowVaultDashboard() {
               </div>
             </div>
 
-            {/* Desktop Navigation */}
             <div className="hidden lg:flex items-center gap-4">
               <div className="flex items-center gap-3 px-3 py-2 bg-accent/50 rounded-xl">
                 <Avatar className="w-8 h-8">
@@ -137,13 +170,14 @@ export default function ShadowVaultDashboard() {
                   <AvatarFallback className="bg-primary text-primary-foreground text-sm">JD</AvatarFallback>
                 </Avatar>
                 <div className="text-sm">
-                  <div className="font-medium text-foreground">john@example.com</div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <div className="font-semibold text-foreground">john@example.com</div>
+                  <button
+                    onClick={copyWalletAddress}
+                    className="flex items-center gap-1 text-xs text-muted-foreground border border-border rounded px-2 py-1 hover:bg-accent transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                  >
                     <span>0x1234...5678</span>
-                    <Button variant="ghost" size="sm" className="h-4 w-4 p-0 focus-ring">
-                      <Copy className="w-3 h-3" />
-                    </Button>
-                  </div>
+                    <Copy className="w-3 h-3" />
+                  </button>
                 </div>
               </div>
 
@@ -188,7 +222,6 @@ export default function ShadowVaultDashboard() {
               </Badge>
             </div>
 
-            {/* Mobile Menu Button */}
             <div className="lg:hidden">
               <Button variant="outline" size="sm" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
                 <Menu className="w-4 h-4" />
@@ -200,7 +233,6 @@ export default function ShadowVaultDashboard() {
 
       <div className="container mx-auto px-6 py-8">
         <div className="grid grid-cols-12 gap-6">
-          {/* Row 1: Security Score (8/12) + Quick Actions (4/12) */}
           <div className="col-span-12 lg:col-span-8">
             <Card className="card-hover bg-gradient-to-br from-card to-card/80 border-primary/20 rounded-xl">
               <CardHeader>
@@ -212,7 +244,6 @@ export default function ShadowVaultDashboard() {
               <CardContent>
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-6">
-                    {/* Circular gauge representation */}
                     <div className="relative w-24 h-24">
                       <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
                         <circle
@@ -258,7 +289,7 @@ export default function ShadowVaultDashboard() {
                     <p className="text-sm text-muted-foreground">Passwords Secured</p>
                   </div>
                   <div className="bg-accent/30 rounded-xl p-4 text-center">
-                    <div className="text-2xl font-bold text-primary">5</div>
+                    <div className="text-2xl font-bold text-primary">2</div>
                     <p className="text-sm text-muted-foreground">Networks Active</p>
                   </div>
                   <div className="bg-accent/30 rounded-xl p-4 text-center">
@@ -297,7 +328,6 @@ export default function ShadowVaultDashboard() {
             </Card>
           </div>
 
-          {/* Row 2: Live Activity (8/12) + Security Center (4/12) */}
           <div className="col-span-12 lg:col-span-8">
             <Card className="card-hover rounded-xl">
               <CardHeader>
@@ -311,12 +341,11 @@ export default function ShadowVaultDashboard() {
                   {recentActivity.map((activity) => (
                     <div
                       key={activity.id}
-                      className="flex items-start gap-4 p-4 rounded-xl bg-accent/20 hover:bg-accent/30 transition-colors"
+                      className={`flex items-start gap-4 p-4 rounded-xl bg-accent/20 hover:bg-accent/30 transition-colors border-l-2 ${getColorRail(activity.severity)} focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2`}
+                      tabIndex={0}
                     >
-                      {/* Timeline status icon */}
                       <div className="flex-shrink-0 mt-1">{getStatusIcon(activity.severity)}</div>
 
-                      {/* Middle content */}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-foreground">{activity.action}</p>
                         <div className="flex items-center gap-2 mt-1">
@@ -325,10 +354,9 @@ export default function ShadowVaultDashboard() {
                         </div>
                       </div>
 
-                      {/* Right chain chips */}
                       <div className="flex gap-1">
                         {activity.chains.map((chain) => (
-                          <Badge key={chain} variant="secondary" className="text-xs px-2 py-1">
+                          <Badge key={chain} variant="secondary" className="text-xs px-2 py-1 font-medium">
                             {chain === "Base" && <Globe className="w-2 h-2 mr-1" />}
                             {chain === "Zircuit" && <Shield className="w-2 h-2 mr-1" />}
                             {chain === "Bridge" && <Zap className="w-2 h-2 mr-1" />}
@@ -354,28 +382,23 @@ export default function ShadowVaultDashboard() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
+                <div className="space-y-2">
                   {securityStatus.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between py-2">
-                      <span className="text-sm text-foreground">{item.label}</span>
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant="secondary"
-                          className={`text-xs ${
-                            item.status === "Active" || item.status === "Protected" || item.status === "Running"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-blue-100 text-blue-800"
-                          }`}
-                        >
-                          {item.status}
-                        </Badge>
-                        <Switch checked={item.enabled} className="focus-ring" />
-                      </div>
-                    </div>
+                    <button
+                      key={index}
+                      onClick={() => handleSecurityToggle(item.key)}
+                      className="w-full flex items-center justify-between py-3 px-2 rounded-lg hover:bg-accent/50 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 min-h-12"
+                    >
+                      <span className="text-sm text-foreground text-left">{item.label}</span>
+                      <Switch
+                        checked={securityToggles[item.key as keyof typeof securityToggles]}
+                        className="focus-ring pointer-events-none"
+                      />
+                    </button>
                   ))}
 
                   <Link href="/security">
-                    <Button className="w-full mt-4 bg-secondary hover:bg-secondary/80 text-secondary-foreground focus-ring button-press">
+                    <Button className="w-full mt-4 bg-primary hover:bg-primary/90 text-primary-foreground focus-ring button-press">
                       <Zap className="w-4 h-4 mr-2" />
                       Open Security Center
                     </Button>
