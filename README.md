@@ -62,6 +62,16 @@ interface VaultItemCipher {
     timestamp: string;
   }
 }
+
+// On-chain data (no sensitive content):
+interface ZircuitObject {
+  user: string;                 // user address
+  itemIdHash: string;           // keccak256(salt + domain + username)
+  itemCommitment: string;       // keccak256(itemIdHash + ipfsCid + encryptionKeyHash)
+  ipfsCid: string;             // IPFS CID of the VaultItemCipher
+  encryptionKeyHash: string;    // SHA-256 of encryption key
+  timestamp: string;           // ISO timestamp
+}
 ```
 
 **Keys**
@@ -78,9 +88,14 @@ interface VaultItemCipher {
 5. Key is used for AES-256-GCM encryption of password
 
 **Commitments (on-chain)**
-- `itemIdHash = keccak256( salt_item || domain || username_hint )`
-- `itemCommitment = keccak256( itemIdHash || cipher_cid || encryption_key_hash )`
+- `itemIdHash = keccak256( commitmentSalt + domain + username )`
+- `itemCommitment = keccak256( itemIdHash + ipfsCid + encryptionKeyHash )`
 - `vaultRoot = merkleRoot( itemCommitment[] )`
+
+**Implementation Details**
+- **Commitment Salt**: 32-byte random salt generated for each item
+- **IPFS Upload**: VaultItemCipher uploaded to IPFS using ipfs-http-client or Pinata API
+- **Smart Contract**: ZircuitObject submitted to VaultRegistry contract on Zircuit testnet
 
 **Privacy levels**
 1) Opaque labels; 2) Label-only (hashed username); 3) Local convenience (plaintext labels stay local).
@@ -131,10 +146,10 @@ interface IShadowVaultRegistry {
 2) User creates new password entry in web UI.
 3) Client derives encryption key from wallet signature using HKDF.
 4) Password is encrypted with AES-256-GCM using derived key + random IV.
-5) VaultItemCipher is created with encrypted password and metadata.
-6) Compute `itemIdHash`, `itemCommitment`.
-7) Push ciphertext(s) to **IPFS** → get CID(s).
-8) Anchor via contract → emits `VaultVersionAnchored` (+ optional per-item events).
+5) **VaultItemCipher** is created with encrypted password and metadata.
+6) **VaultItemCipher** is uploaded to **IPFS** → get CID.
+7) **ZircuitObject** is created with commitments and hashes (no sensitive data).
+8) **ZircuitObject** is submitted to smart contract → emits `VaultItemCommitted`.
 9) **Envio** indexes; UI refreshes by querying Envio.
 
 **Verify (auditor/self)**
@@ -188,15 +203,21 @@ ENVIO_API_URL=...          # your Envio query endpoint
 ### 8.3 Local Dev
 ```bash
 # install deps
+cd ShadowVaultApp
 npm install
 
-# compile & test contracts (Hardhat or Foundry)
-npx hardhat compile
-npx hardhat test
-
-# run extension dev server (example)
-npm run dev:ext
+# run the web app
+npm run dev
 ```
+
+**Current Implementation Status**
+- ✅ **Key Derivation**: HKDF with wallet signature
+- ✅ **AES-GCM Encryption**: Password encryption with random IV
+- ✅ **VaultItemCipher**: Complete encrypted structure
+- ✅ **ZircuitObject**: On-chain data structure (no sensitive content)
+- ✅ **IPFS Examples**: Upload examples with ipfs-http-client and Pinata API
+- ✅ **Smart Contract Examples**: Wagmi integration examples
+- 🔄 **Next Steps**: IPFS upload implementation, smart contract deployment
 
 ### 8.4 Deploy (Testnet)
 - Author/spec contracts in Nora → generate Solidity + tests.  

@@ -19,6 +19,16 @@ export interface VaultItemCipher {
   }
 }
 
+// ZircuitObject interface for on-chain data (no sensitive content)
+export interface ZircuitObject {
+  user: string;                 // user address
+  itemIdHash: string;           // keccak256(salt + domain + username)
+  itemCommitment: string;       // keccak256(itemIdHash + ipfsCid + encryptionKeyHash)
+  ipfsCid: string;             // IPFS CID of the VaultItemCipher
+  encryptionKeyHash: string;    // SHA-256 of encryption key
+  timestamp: string;           // ISO timestamp
+}
+
 export function hexToBytes(hex: string): Uint8Array {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex
   if (clean.length % 2 !== 0) throw new Error('Invalid hex string length')
@@ -193,6 +203,52 @@ export async function createVaultItemCipher(
   })
   
   return vaultItem
+}
+
+export async function createZircuitObject(
+  vaultItem: VaultItemCipher,
+  userAddress: string,
+  ipfsCid: string
+): Promise<ZircuitObject> {
+  console.log('[Encryption] Creating ZircuitObject...')
+  
+  // Generate random salt for commitment (different from HKDF salt)
+  const commitmentSalt = crypto.getRandomValues(new Uint8Array(32))
+  const commitmentSaltHex = Array.from(commitmentSalt).map(b => b.toString(16).padStart(2, '0')).join('')
+  console.log('[Encryption] Commitment salt (first 8 bytes):', commitmentSaltHex.slice(0, 16))
+  
+  // Calculate itemIdHash = keccak256(salt + domain + username)
+  const itemIdSource = `${commitmentSaltHex}${vaultItem.site}${vaultItem.username}`
+  const itemIdHash = await sha256Bytes(utf8ToBytes(itemIdSource))
+  const itemIdHashHex = Array.from(itemIdHash).map(b => b.toString(16).padStart(2, '0')).join('')
+  console.log('[Encryption] ItemIdHash (first 8 bytes):', itemIdHashHex.slice(0, 16))
+  
+  // Calculate itemCommitment = keccak256(itemIdHash + ipfsCid + encryptionKeyHash)
+  const commitmentSource = `${itemIdHashHex}${ipfsCid}${vaultItem.encryptionKeyHash}`
+  const itemCommitment = await sha256Bytes(utf8ToBytes(commitmentSource))
+  const itemCommitmentHex = Array.from(itemCommitment).map(b => b.toString(16).padStart(2, '0')).join('')
+  console.log('[Encryption] ItemCommitment (first 8 bytes):', itemCommitmentHex.slice(0, 16))
+  
+  // Create ZircuitObject
+  const zircuitObject: ZircuitObject = {
+    user: userAddress,
+    itemIdHash: itemIdHashHex,
+    itemCommitment: itemCommitmentHex,
+    ipfsCid: ipfsCid,
+    encryptionKeyHash: vaultItem.encryptionKeyHash,
+    timestamp: vaultItem.meta.timestamp
+  }
+  
+  console.log('[Encryption] ZircuitObject created:', {
+    user: zircuitObject.user,
+    itemIdHash: zircuitObject.itemIdHash.slice(0, 16) + '...',
+    itemCommitment: zircuitObject.itemCommitment.slice(0, 16) + '...',
+    ipfsCid: zircuitObject.ipfsCid,
+    encryptionKeyHash: zircuitObject.encryptionKeyHash.slice(0, 16) + '...',
+    timestamp: zircuitObject.timestamp
+  })
+  
+  return zircuitObject
 }
 
 

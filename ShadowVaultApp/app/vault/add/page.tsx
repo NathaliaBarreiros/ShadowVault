@@ -26,7 +26,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { deriveEncryptionKeyFromSignature, createVaultItemCipher } from "@/lib/encryption"
+import { deriveEncryptionKeyFromSignature, createVaultItemCipher, createZircuitObject } from "@/lib/encryption"
 
 interface NetworkOption {
   id: string
@@ -207,10 +207,105 @@ export default function AddPasswordPage() {
       console.log('[AddPassword] Encrypted password length:', vaultItem.cipher.length)
       console.log('[AddPassword] IV length:', vaultItem.iv.length)
       
-      // TODO: Step 4: Generate Poseidon commitment (SHA-256 for now)
-      // TODO: Step 5: Store ciphertext envelope
+      // Step 4: Create ZircuitObject (for on-chain submission)
+      // TODO: Step 4.1: Upload VaultItemCipher to IPFS to get CID
+      /*
+      // Example of how to upload VaultItemCipher to IPFS:
+      // 
+      // 1. Install IPFS client
+      // npm install ipfs-http-client
+      // 
+      // 2. Import IPFS client
+      // import { create } from 'ipfs-http-client'
+      // 
+      // 3. Create IPFS client (using Infura, Pinata, or local node)
+      // const ipfs = create({
+      //   host: 'ipfs.infura.io',
+      //   port: 5001,
+      //   protocol: 'https',
+      //   headers: {
+      //     authorization: 'Basic ' + Buffer.from(process.env.IPFS_PROJECT_ID + ':' + process.env.IPFS_PROJECT_SECRET).toString('base64')
+      //   }
+      // })
+      // 
+      // 4. Upload VaultItemCipher to IPFS
+      // const vaultItemJson = JSON.stringify(vaultItem, null, 2)
+      // const vaultItemBuffer = Buffer.from(vaultItemJson, 'utf8')
+      // 
+      // const result = await ipfs.add(vaultItemBuffer, {
+      //   pin: true,
+      //   metadata: {
+      //     name: `vault-item-${vaultItem.meta.timestamp}`,
+      //     description: `ShadowVault encrypted password for ${vaultItem.site}`
+      //   }
+      // })
+      // 
+      // 5. Get CID from result
+      // const ipfsCid = result.cid.toString()
+      // console.log('[AddPassword] VaultItemCipher uploaded to IPFS:', ipfsCid)
+      // 
+      // 6. Alternative: Using Pinata API
+      // const pinataResponse = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
+      //   method: 'POST',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //     'Authorization': `Bearer ${process.env.PINATA_JWT}`
+      //   },
+      //   body: JSON.stringify({
+      //     pinataMetadata: {
+      //       name: `vault-item-${vaultItem.meta.timestamp}`,
+      //       description: `ShadowVault encrypted password for ${vaultItem.site}`
+      //     },
+      //     pinataContent: vaultItem
+      //   })
+      // })
+      // const pinataData = await pinataResponse.json()
+      // const ipfsCid = pinataData.IpfsHash
+      */
+      
+      const mockIpfsCid = "QmMockCidForDemo123456789" // TODO: Replace with real IPFS upload
+      
+      const zircuitObject = await createZircuitObject(vaultItem, address, mockIpfsCid)
+      console.log('[AddPassword] ZircuitObject created successfully!')
+      console.log('[AddPassword] Ready for Zircuit submission:', {
+        user: zircuitObject.user,
+        itemIdHash: zircuitObject.itemIdHash.slice(0, 16) + '...',
+        itemCommitment: zircuitObject.itemCommitment.slice(0, 16) + '...',
+        ipfsCid: zircuitObject.ipfsCid
+      })
+      
+      // TODO: Step 5: Submit ZircuitObject to smart contract
+      /*
+      // Example of how to submit to Zircuit smart contract:
+      // 
+      // 1. Import wagmi hooks
+      // import { useContractWrite, usePrepareContractWrite } from 'wagmi'
+      // 
+      // 2. Prepare contract write
+      // const { config } = usePrepareContractWrite({
+      //   address: '0x...', // VaultRegistry contract address on Zircuit
+      //   abi: VaultRegistryABI,
+      //   functionName: 'storeVaultItem',
+      //   args: [
+      //     zircuitObject.user,           // address user
+      //     zircuitObject.itemIdHash,     // bytes32 itemIdHash
+      //     zircuitObject.itemCommitment, // bytes32 itemCommitment
+      //     zircuitObject.ipfsCid,        // string ipfsCid
+      //     zircuitObject.encryptionKeyHash // bytes32 encryptionKeyHash
+      //   ]
+      // })
+      // 
+      // 3. Execute transaction
+      // const { write: submitToZircuit } = useContractWrite(config)
+      // await submitToZircuit()
+      // 
+      // 4. Wait for transaction confirmation
+      // const { data: txData, isSuccess } = await submitToZircuit()
+      // console.log('[AddPassword] Transaction submitted:', txData?.hash)
+      */
+      
       // TODO: Step 6: Generate ZK proof of password strength
-      // TODO: Step 7: Submit to Zircuit contract
+      // TODO: Step 7: Index with Envio
       
       // Simulate remaining steps for now
       await new Promise((resolve) => setTimeout(resolve, 1000))
