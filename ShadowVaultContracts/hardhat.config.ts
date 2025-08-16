@@ -1,9 +1,11 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@typechain/hardhat";
-import { config } from "dotenv";
+import "dotenv/config";
 
-config();
+// Securely load the private key
+const privateKey = process.env.PRIVATE_KEY;
+const accounts = privateKey ? [privateKey] : [];
 
 const hardhatConfig: HardhatUserConfig = {
   solidity: {
@@ -21,9 +23,7 @@ const hardhatConfig: HardhatUserConfig = {
     },
     zircuitGarfieldTestnet: {
       url: process.env.ZIRCUIT_RPC_URL || "https://garfield-testnet.zircuit.com",
-      accounts: process.env.PRIVATE_KEY && process.env.PRIVATE_KEY.length === 64 
-        ? [process.env.PRIVATE_KEY] 
-        : [],
+      accounts: accounts,
       chainId: 48898,
     },
   },
