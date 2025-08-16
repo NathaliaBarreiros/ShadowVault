@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useAccount, useSignMessage } from "wagmi"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -25,6 +26,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { deriveEncryptionKeyFromSignature } from "@/lib/encryption"
 
 interface NetworkOption {
   id: string
@@ -36,6 +38,8 @@ interface NetworkOption {
 
 export default function AddPasswordPage() {
   const router = useRouter()
+  const { address } = useAccount()
+  const { signMessageAsync } = useSignMessage()
   const [formData, setFormData] = useState({
     name: "",
     username: "",
@@ -163,13 +167,58 @@ export default function AddPasswordPage() {
   }
 
   const handleSave = async () => {
+    if (!address) {
+      console.error('No wallet address available')
+      return
+    }
+    
     setIsSaving(true)
 
-    // Simulate saving to blockchain
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-
-    setIsSaving(false)
-    router.push("/vault")
+    try {
+      console.log('[AddPassword] Starting encryption key derivation...')
+      
+      // Step 1: Derive encryption key from wallet signature
+      const message = `Generate encryption key for ShadowVault session`
+      console.log('[AddPassword] Message to sign:', message)
+      
+      const signature = await signMessageAsync({ message })
+      console.log('[AddPassword] Signature received:', signature)
+      
+      const { rawKey, base64Key } = await deriveEncryptionKeyFromSignature(signature, address)
+      console.log('[AddPassword] Encryption key derived (first 8 bytes):', Array.from(rawKey.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(''))
+      console.log('[AddPassword] Encryption key (base64):', base64Key)
+      
+      // Step 2: Create plaintext payload to encrypt
+      const payload = {
+        site: formData.name,
+        username: formData.username,
+        password: formData.password,
+        url: formData.url,
+        notes: formData.notes,
+        category: formData.category,
+        network: formData.network,
+        timestamp: new Date().toISOString()
+      }
+      console.log('[AddPassword] Payload to encrypt:', payload)
+      
+      // TODO: Step 3: Encrypt payload with derived key (AES-256-GCM)
+      // TODO: Step 4: Generate Poseidon commitment (SHA-256 for now)
+      // TODO: Step 5: Store ciphertext envelope
+      // TODO: Step 6: Generate ZK proof of password strength
+      // TODO: Step 7: Submit to Zircuit contract
+      
+      // Simulate the full process for now
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+      
+      console.log('[AddPassword] Password saved successfully!')
+      
+    } catch (error) {
+      console.error('[AddPassword] Error during save:', error)
+      // TODO: Show error to user
+    } finally {
+      setIsSaving(false)
+      router.push("/vault")
+    }
   }
 
   const getStrengthColor = () => {
