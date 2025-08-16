@@ -34,8 +34,10 @@ import {
   X,
   RefreshCw,
   Download,
+  LogOut,
 } from "lucide-react"
 import Link from "next/link"
+import { useAuth } from "@/components/providers/AuthProvider"
 
 interface ProofDetails {
   txHash: string
@@ -104,6 +106,7 @@ const UnifiedChip = ({
 }
 
 export default function ShadowVaultDashboard() {
+  const { signOut, user } = useAuth()
   const [securityScore] = useState(94)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [hoveredActivity, setHoveredActivity] = useState<number | null>(null)
@@ -274,11 +277,28 @@ export default function ShadowVaultDashboard() {
   }
 
   const copyWalletAddress = () => {
-    navigator.clipboard.writeText("0x1234567890abcdef1234567890abcdef12345678")
+    if (!user?.address) return
+    navigator.clipboard.writeText(user.address)
     toast({
       title: "Copied!",
       description: "Wallet address copied to clipboard",
     })
+  }
+
+  const handleLogout = async () => {
+    try {
+      await signOut()
+      toast({
+        title: "Signed out",
+        description: "You have been successfully signed out",
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to sign out. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleSecurityToggle = (key: string) => {
@@ -453,24 +473,28 @@ export default function ShadowVaultDashboard() {
                 <div className="flex items-center gap-3 px-3 py-2 bg-accent/50 rounded-xl">
                   <Avatar className="w-8 h-8">
                     <AvatarImage src="/diverse-user-avatars.png" />
-                    <AvatarFallback className="bg-[#0F766E] text-white text-sm">JD</AvatarFallback>
+                    <AvatarFallback className="bg-[#0F766E] text-white text-sm">
+                      {user?.email ? user.email.slice(0, 2).toUpperCase() : "JD"}
+                    </AvatarFallback>
                   </Avatar>
                   <div className="text-sm">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div className="font-semibold text-foreground max-w-[120px] truncate">
-                          john.doe.longname@example.com
+                          {user?.email || "user@example.com"}
                         </div>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>john.doe.longname@example.com</p>
+                        <p>{user?.email || "user@example.com"}</p>
                       </TooltipContent>
                     </Tooltip>
                     <button
                       onClick={copyWalletAddress}
                       className="flex items-center gap-1 text-xs text-muted-foreground border border-border rounded px-2 py-1 hover:bg-accent transition-colors focus:outline-none focus:ring-2 focus:ring-[#22D3EE] focus:ring-offset-2 min-h-[40px] min-w-[40px]"
                     >
-                      <span className="whitespace-nowrap">0x1234...5678</span>
+                      <span className="whitespace-nowrap">
+                        {user?.address ? `${user.address.slice(0, 6)}...${user.address.slice(-4)}` : "0x1234...5678"}
+                      </span>
                       <Copy className="w-3 h-3" />
                     </button>
                   </div>
@@ -557,6 +581,22 @@ export default function ShadowVaultDashboard() {
                     Add Password
                   </Button>
                 </Link>
+                
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleLogout}
+                      className="focus:outline-none focus:ring-2 focus:ring-[#22D3EE] focus:ring-offset-2 bg-transparent min-h-[40px] min-w-[40px]"
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Sign out</p>
+                  </TooltipContent>
+                </Tooltip>
               </div>
 
               <div className="lg:hidden">
@@ -875,16 +915,18 @@ export default function ShadowVaultDashboard() {
                       {securityStatus.map((item, index) => {
                         const isActive = securityToggles[item.key as keyof typeof securityToggles]
                         return (
-                          <button
+                          <div
                             key={index}
-                            onClick={() => handleSecurityToggle(item.key)}
-                            className={`w-full flex items-center justify-between py-3 px-3 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[#22D3EE] focus:ring-offset-2 min-h-[48px] ${
+                            className={`w-full flex items-center justify-between py-3 px-3 rounded-lg transition-colors min-h-[48px] ${
                               isActive
                                 ? "bg-[#0F766E]/10 hover:bg-[#0F766E]/15 border border-[#0F766E]/20"
                                 : "hover:bg-accent/50"
                             }`}
                           >
-                            <div className="text-left">
+                            <div 
+                              className="text-left flex-1 cursor-pointer"
+                              onClick={() => handleSecurityToggle(item.key)}
+                            >
                               <span className="text-sm text-foreground block">{item.label}</span>
                               <span className="text-xs text-muted-foreground">
                                 {item.lastRun ? `Last: ${item.lastRun}` : `Next: ${item.nextRun}`}
@@ -892,9 +934,10 @@ export default function ShadowVaultDashboard() {
                             </div>
                             <Switch
                               checked={isActive}
-                              className="focus:outline-none focus:ring-2 focus:ring-[#22D3EE] focus:ring-offset-2 pointer-events-none"
+                              onCheckedChange={() => handleSecurityToggle(item.key)}
+                              className="focus:outline-none focus:ring-2 focus:ring-[#22D3EE] focus:ring-offset-2"
                             />
-                          </button>
+                          </div>
                         )
                       })}
 
