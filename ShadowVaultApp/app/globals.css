@@ -1,26 +1,185 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: oklch(1 0 0); /* #ffffff - Clean white background */
+  --foreground: oklch(0.345 0.012 258.338); /* #475569 - Dark gray text */
+  --card: oklch(0.984 0.013 180.695); /* #ecfeff - Light cyan card background */
+  --card-foreground: oklch(0.298 0.055 200.975); /* #164e63 - Cyan-800 card text */
+  --popover: oklch(1 0 0); /* #ffffff - White popover */
+  --popover-foreground: oklch(0.345 0.012 258.338); /* #475569 - Dark gray popover text */
+  --primary: oklch(0.255 0.078 200.975); /* #0f4c5c - Deep teal primary */
+  --primary-foreground: oklch(1 0 0); /* #ffffff - White text on primary */
+  --secondary: oklch(0.574 0.207 271.693); /* #6366f1 - Blue accent */
+  --secondary-foreground: oklch(1 0 0); /* #ffffff - White text on secondary */
+  --muted: oklch(0.98 0.004 106.423); /* #f8fafc - Very light gray muted */
+  --muted-foreground: oklch(0.345 0.012 258.338); /* #475569 - Dark gray muted text */
+  --accent: oklch(0.574 0.207 271.693); /* #6366f1 - Blue accent */
+  --accent-foreground: oklch(1 0 0); /* #ffffff - White text on accent */
+  --destructive: oklch(0.576 0.18 41.313); /* #ea580c - Orange destructive */
+  --destructive-foreground: oklch(1 0 0); /* #ffffff - White text on destructive */
+  --border: oklch(0.85 0.004 106.423); /* #d1d5db - Light gray border */
+  --input: oklch(1 0 0); /* #ffffff - White input background */
+  --ring: oklch(0.255 0.078 200.975 / 0.5); /* Deep teal focus ring with opacity */
+  --chart-1: oklch(0.574 0.207 271.693); /* #6366f1 - Blue primary chart */
+  --chart-2: oklch(0.576 0.18 41.313); /* #ea580c - Orange secondary chart */
+  --chart-3: oklch(0.345 0.012 258.338); /* #4b5563 - Gray tertiary chart */
+  --chart-4: oklch(0.298 0.055 200.975); /* #164e63 - Cyan quaternary chart */
+  --chart-5: oklch(0.345 0.012 258.338); /* #475569 - Dark gray quinary chart */
+  --radius: 0.5rem;
+  --sidebar: oklch(0.984 0.013 180.695); /* #ecfeff - Light cyan sidebar */
+  --sidebar-foreground: oklch(0.298 0.055 200.975); /* #164e63 - Cyan sidebar text */
+  --sidebar-primary: oklch(1 0 0); /* #ffffff - White sidebar primary */
+  --sidebar-primary-foreground: oklch(0.298 0.055 200.975); /* #164e63 - Cyan sidebar primary text */
+  --sidebar-accent: oklch(0.574 0.207 271.693); /* #6366f1 - Blue sidebar accent */
+  --sidebar-accent-foreground: oklch(1 0 0); /* #ffffff - White sidebar accent text */
+  --sidebar-border: oklch(0.85 0.004 106.423); /* #d1d5db - Light gray sidebar border */
+  --sidebar-ring: oklch(0.298 0.055 200.975 / 0.5); /* Primary color with opacity for sidebar focus ring */
+  --font-dm-sans: "DM Sans", sans-serif;
+}
+
+.dark {
+  --background: oklch(0.145 0 0); /* Dark background */
+  --foreground: oklch(0.985 0 0); /* Light text */
+  --card: oklch(0.18 0.008 200.975); /* Dark cyan card */
+  --card-foreground: oklch(0.984 0.013 180.695); /* Light cyan text */
+  --popover: oklch(0.145 0 0); /* Dark popover */
+  --popover-foreground: oklch(0.985 0 0); /* Light popover text */
+  --primary: oklch(0.355 0.098 200.975); /* Lighter deep teal for dark mode */
+  --primary-foreground: oklch(1 0 0); /* White text on primary */
+  --secondary: oklch(0.298 0.055 200.975); /* Cyan secondary in dark */
+  --secondary-foreground: oklch(1 0 0); /* White text on secondary */
+  --muted: oklch(0.269 0 0); /* Dark muted */
+  --muted-foreground: oklch(0.708 0 0); /* Light muted text */
+  --accent: oklch(0.574 0.207 271.693); /* Blue accent in dark */
+  --accent-foreground: oklch(1 0 0); /* White text on accent */
+  --destructive: oklch(0.576 0.18 41.313); /* Orange destructive */
+  --destructive-foreground: oklch(1 0 0); /* White text on destructive */
+  --border: oklch(0.269 0 0); /* Dark border */
+  --input: oklch(0.269 0 0); /* Dark input */
+  --ring: oklch(0.355 0.098 200.975 / 0.5); /* Deep teal focus ring for dark mode */
+  --chart-1: oklch(0.574 0.207 271.693); /* Blue chart */
+  --chart-2: oklch(0.576 0.18 41.313); /* Orange chart */
+  --chart-3: oklch(0.708 0 0); /* Light gray chart */
+  --chart-4: oklch(0.984 0.013 180.695); /* Light cyan chart */
+  --chart-5: oklch(0.345 0.012 258.338); /* Dark gray chart */
+  --sidebar: oklch(0.18 0.008 200.975); /* Dark cyan sidebar */
+  --sidebar-foreground: oklch(0.984 0.013 180.695); /* Light cyan sidebar text */
+  --sidebar-primary: oklch(0.574 0.207 271.693); /* Blue sidebar primary */
+  --sidebar-primary-foreground: oklch(1 0 0); /* White sidebar primary text */
+  --sidebar-accent: oklch(0.298 0.055 200.975); /* Cyan sidebar accent */
+  --sidebar-accent-foreground: oklch(1 0 0); /* White sidebar accent text */
+  --sidebar-border: oklch(0.269 0 0); /* Dark sidebar border */
+  --sidebar-ring: oklch(0.574 0.207 271.693 / 0.5); /* Blue sidebar focus ring */
 }
 
 @theme inline {
+  --font-sans: var(--font-dm-sans);
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  /* Focus ring utility for accessibility */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  /* Button press animation */
+  .button-press {
+    @apply active:translate-y-px transition-transform duration-150;
+  }
+
+  /* Card hover effect */
+  .card-hover {
+    @apply hover:shadow-lg transition-shadow duration-200;
+  }
+
+  /* Respect reduced motion preference */
+  @media (prefers-reduced-motion: reduce) {
+    .button-press,
+    .card-hover {
+      @apply transition-none;
+    }
+  }
+
+  /* Status color utilities */
+  .status-success {
+    @apply text-green-600 bg-green-50 border-green-200;
+  }
+
+  .status-warning {
+    @apply text-amber-600 bg-amber-50 border-amber-200;
+  }
+
+  .status-info {
+    @apply text-blue-600 bg-blue-50 border-blue-200;
+  }
+
+  .status-error {
+    @apply text-red-600 bg-red-50 border-red-200;
+  }
+
+  /* Dark mode status colors */
+  .dark .status-success {
+    @apply text-green-400 bg-green-950 border-green-800;
+  }
+
+  .dark .status-warning {
+    @apply text-amber-400 bg-amber-950 border-amber-800;
+  }
+
+  .dark .status-info {
+    @apply text-blue-400 bg-blue-950 border-blue-800;
+  }
+
+  .dark .status-error {
+    @apply text-red-400 bg-red-950 border-red-800;
+  }
 }
