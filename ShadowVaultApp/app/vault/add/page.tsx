@@ -131,6 +131,8 @@ export default function AddPasswordPage() {
     setFormData((prev) => ({ ...prev, password }))
     analyzePasswordStrength(password)
     setIsGenerating(false)
+
+    return password;
   }
 
   const handleInputChange = (field: string, value: string) => {
