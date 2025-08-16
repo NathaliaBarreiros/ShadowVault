@@ -119,33 +119,15 @@ export default function AddPasswordPage() {
     // Simulate AI password generation
     await new Promise((resolve) => setTimeout(resolve, 1500))
 
-    const chars = {
-      lower: "abcdefghijklmnopqrstuvwxyz",
-      upper: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-      numbers: "0123456789",
-      symbols: "!@#$%^&*()_+-=[]{}|;:,.<>?",
-    }
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+';
+    const len = 24;
+    const array = new Uint32Array(len);
 
     let password = ""
-
-    // Ensure at least one of each type
-    password += chars.lower[Math.floor(Math.random() * chars.lower.length)]
-    password += chars.upper[Math.floor(Math.random() * chars.upper.length)]
-    password += chars.numbers[Math.floor(Math.random() * chars.numbers.length)]
-    password += chars.symbols[Math.floor(Math.random() * chars.symbols.length)]
-
-    // Fill remaining length
-    const allChars = chars.lower + chars.upper + chars.numbers + chars.symbols
-    for (let i = 4; i < 16; i++) {
-      password += allChars[Math.floor(Math.random() * allChars.length)]
-    }
-
-    // Shuffle the password
-    password = password
-      .split("")
-      .sort(() => Math.random() - 0.5)
-      .join("")
-
+    
+    crypto.getRandomValues(array);
+    password = Array.from(array, x => chars[x % chars.length]).join('');
+    
     setFormData((prev) => ({ ...prev, password }))
     analyzePasswordStrength(password)
     setIsGenerating(false)
