@@ -116,13 +116,22 @@ Contract owner: 0x...
 ✅ Deployment completed successfully!
 ```
 
-### 4. Verify Contract (Optional)
+### 4. Verify Contract (Recommended)
+
+Zircuit Garfield Testnet supports Sourcify verification, which provides decentralized source code verification:
 
 ```bash
-npm run verify:zircuit <contract_address> <owner_address>
-# or
-npx hardhat run scripts/verify.ts --network zircuitGarfieldTestnet <contract_address> <owner_address>
+npx hardhat verify --network zircuitGarfieldTestnet <contract_address> <owner_address>
 ```
+
+**Example for our deployed contract:**
+```bash
+npx hardhat verify --network zircuitGarfieldTestnet 0xFfD385c7BC7645846449363825a31435DA6d2095 0xee121da86e540f34956942d3678060c3AAc7D596
+```
+
+**Verification Results:**
+- ✅ **Successfully verified on Sourcify**
+- 📄 **Source Code**: https://repo.sourcify.dev/contracts/full_match/48898/0xFfD385c7BC7645846449363825a31435DA6d2095/
 
 ### 5. Test Interaction
 
