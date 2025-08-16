@@ -47,6 +47,42 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, user, isLoading, router])
 
+  // Store the email in localStorage when user enters it for the AuthButton
+  // We'll use a MutationObserver to detect when email is entered in CDP AuthButton
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    // Create a MutationObserver to watch for email input changes
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'childList') {
+          // Look for email input field in the CDP AuthButton component
+          const emailInputs = document.querySelectorAll('input[type="email"], input[placeholder*="email" i]')
+          emailInputs.forEach((input) => {
+            if (input instanceof HTMLInputElement && !input.dataset.listenerAdded) {
+              input.dataset.listenerAdded = 'true'
+              input.addEventListener('change', (e) => {
+                const email = (e.target as HTMLInputElement).value
+                if (email && email.includes('@')) {
+                  console.log('LoginPage: Storing email for header display:', email)
+                  localStorage.setItem('cdp-login-email', email)
+                }
+              })
+            }
+          })
+        }
+      })
+    })
+
+    // Start observing
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    })
+
+    return () => observer.disconnect()
+  }, [])
+
   const {
     register,
     handleSubmit,

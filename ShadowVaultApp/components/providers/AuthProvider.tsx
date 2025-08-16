@@ -19,6 +19,7 @@ interface AuthContextType extends AuthState {
   setLoginStep: (step: 'email' | 'otp') => void
   setLoginEmail: (email: string) => void
   isUsingCDP: boolean
+  userLoginEmail: string | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -40,6 +41,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Login flow state for backward compatibility
   const [loginStep, setLoginStep] = useState<'email' | 'otp'>('email')
   const [loginEmail, setLoginEmail] = useState('')
+  
+  // Store the email used for login to display in header
+  const [userLoginEmail, setUserLoginEmail] = useState<string | null>(
+    typeof window !== 'undefined' ? localStorage.getItem('cdp-login-email') : null
+  )
+
+  // Listen for localStorage changes to update email
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const handleStorageChange = () => {
+      const storedEmail = localStorage.getItem('cdp-login-email')
+      setUserLoginEmail(storedEmail)
+    }
+
+    // Listen for storage events (from other tabs/windows)
+    window.addEventListener('storage', handleStorageChange)
+    
+    // Also check periodically for changes in same tab
+    const interval = setInterval(handleStorageChange, 1000)
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+      clearInterval(interval)
+    }
+  }, [])
 
   console.log('AuthProvider render - CDP status:', { 
     isInitialized, 
@@ -48,6 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     evmAddress,
     hasUser: !!cdpUser,
     userEmail: cdpUser?.email,
+    userLoginEmail,
     authState 
   })
 
@@ -66,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAuthState({
         isAuthenticated: true,
         user: {
-          email: cdpUser?.email || 'cdp-user@coinbase.com',
+          email: userLoginEmail || cdpUser?.email || 'cdp-user@coinbase.com',
           id: cdpUser?.id || 'cdp_user',
           address: evmAddress
         },
@@ -78,8 +106,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user: null,
         isLoading: false,
       })
+      // Clear stored email when signed out
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('cdp-login-email')
+        setUserLoginEmail(null)
+      }
     }
-  }, [isInitialized, isSignedIn, evmAddress, cdpUser])
+  }, [isInitialized, isSignedIn, evmAddress, cdpUser, userLoginEmail])
 
   // Simplified functions for backward compatibility with our existing UI
   const signInWithEmail = async (email: string) => {
@@ -120,6 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoginStep,
     setLoginEmail,
     isUsingCDP: isInitialized, // CDP is available if initialized
+    userLoginEmail,
   }
 
   return (
