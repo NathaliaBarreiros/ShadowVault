@@ -4,7 +4,7 @@ import { DM_Sans } from "next/font/google"
 import "./globals.css"
 import { AuthProvider } from "@/components/providers/AuthProvider"
 import { AuthGuard } from "@/components/auth/AuthGuard"
-import { CDPProvider } from "@/components/providers/CDPProvider"
+import { PrivyProvider } from "@/components/providers/PrivyProvider"
 import { Toaster } from "@/components/ui/toaster"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
@@ -29,7 +29,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={dmSans.variable}>
       <body className="font-sans antialiased">
-        <CDPProvider>
+        <PrivyProvider>
           <AuthProvider>
             <TooltipProvider>
               <AuthGuard>
@@ -38,7 +38,7 @@ export default function RootLayout({
               <Toaster />
             </TooltipProvider>
           </AuthProvider>
-        </CDPProvider>
+        </PrivyProvider>
       </body>
     </html>
   )

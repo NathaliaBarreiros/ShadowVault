@@ -478,7 +478,7 @@ export default function ShadowVaultDashboard() {
                     </AvatarFallback>
                   </Avatar>
                   <div className="text-sm">
-                    <Tooltip>
+                    {/* <Tooltip>
                       <TooltipTrigger asChild>
                         <div className="font-semibold text-foreground max-w-[120px] truncate">
                           {user?.email || "user@example.com"}
@@ -487,7 +487,7 @@ export default function ShadowVaultDashboard() {
                       <TooltipContent>
                         <p>{user?.email || "user@example.com"}</p>
                       </TooltipContent>
-                    </Tooltip>
+                    </Tooltip> */}
                     <button
                       onClick={copyWalletAddress}
                       className="flex items-center gap-1 text-xs text-muted-foreground border border-border rounded px-2 py-1 hover:bg-accent transition-colors focus:outline-none focus:ring-2 focus:ring-[#22D3EE] focus:ring-offset-2 min-h-[40px] min-w-[40px]"
