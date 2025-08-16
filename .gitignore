@@ -163,3 +163,5 @@ deployments/
 # yarn.lock         # Keep if using yarn  
 # pnpm-lock.yaml    # Keep if using pnpm
 cdp-app
+
+.cursor/
