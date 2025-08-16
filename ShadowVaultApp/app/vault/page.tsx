@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useAuth } from "@/components/providers/AuthProvider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -38,6 +39,7 @@ interface PasswordEntry {
 }
 
 export default function VaultPage() {
+  const { user } = useAuth()
   const [searchQuery, setSearchQuery] = useState("")
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({})
   const [copyingId, setCopyingId] = useState<string | null>(null)
@@ -177,6 +179,9 @@ export default function VaultPage() {
               <div>
                 <h1 className="text-xl font-bold text-foreground">Password Vault</h1>
                 <p className="text-sm text-muted-foreground">{filteredPasswords.length} passwords secured</p>
+                {user?.email && (
+                  <p className="text-xs text-muted-foreground">Welcome, {user.email}</p>
+                )}
               </div>
             </div>
             <Button className="bg-primary hover:bg-primary/90">

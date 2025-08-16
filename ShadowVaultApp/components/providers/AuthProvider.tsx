@@ -29,8 +29,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { isInitialized } = useIsInitialized()
   const { isSignedIn } = useIsSignedIn()
   const { evmAddress } = useEvmAddress()
-  const { user: cdpUser } = useCurrentUser()
+  const { currentUser: cdpUser } = useCurrentUser()
   const { signOut: cdpSignOut } = useSignOut()
+  
+  // Try multiple ways to get the email
+  const email = cdpUser?.authenticationMethods?.email?.email || cdpUser?.email
+  console.log('AuthProvider debug:', { 
+    cdpUser, 
+    evmAddress, 
+    email,
+    authMethods: cdpUser?.authenticationMethods,
+    fullUser: cdpUser 
+  })
   
   const [authState, setAuthState] = useState<AuthState>({
     isAuthenticated: false,
@@ -74,7 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hasEvmAddress: !!evmAddress,
     evmAddress,
     hasUser: !!cdpUser,
-    userEmail: cdpUser?.email,
+    extractedEmail: email,
     userLoginEmail,
     authState 
   })
@@ -91,11 +101,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (isSignedIn && evmAddress) {
+      const userEmail = cdpUser?.authenticationMethods?.email?.email || cdpUser?.email
+      //const userEmail = email || userLoginEmail || 'cdp-user@coinbase.com'
       setAuthState({
         isAuthenticated: true,
         user: {
-          email: userLoginEmail || cdpUser?.email || 'cdp-user@coinbase.com',
-          id: cdpUser?.id || 'cdp_user',
+          email: userEmail,
+          id: cdpUser?.userId || 'cdp_user',
           address: evmAddress
         },
         isLoading: false,
