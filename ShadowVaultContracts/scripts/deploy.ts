@@ -8,6 +8,15 @@ async function main() {
 
   // Get the deployer account
   const [deployer] = await ethers.getSigners();
+
+  // Check if a deployer account is available
+  if (!deployer) {
+    console.error("❌ Deployment failed: No deployer account found.");
+    console.error("Please ensure you have a PRIVATE_KEY set in your .env file in the 'ShadowVaultContracts' directory.");
+    console.error("Example: PRIVATE_KEY=your_64_character_private_key_here");
+    throw new Error("Deployer account not configured.");
+  }
+
   console.log("Deploying contracts with the account:", deployer.address);
 
   // Get account balance
@@ -48,10 +57,15 @@ async function main() {
   console.log(`Block Number: ${deploymentInfo.blockNumber}`);
   console.log(`Timestamp: ${deploymentInfo.timestamp}`);
 
+  console.log("\n🌐 Explorer URLs:");
+  console.log("================");
+  console.log(`Contract on Zircuit Explorer: https://explorer.garfield-testnet.zircuit.com/address/${contractAddress}`);
+  console.log(`Deployer Account: https://explorer.garfield-testnet.zircuit.com/address/${deployer.address}`);
+
   console.log("\n🔗 Next Steps:");
   console.log("==============");
-  console.log("1. Verify contract on BaseScan:");
-  console.log(`   npx hardhat verify --network baseSepolia ${contractAddress} ${deployer.address}`);
+  console.log("1. Verify contract on Zircuit Explorer:");
+  console.log(`   npx hardhat verify --network zircuitGarfieldTestnet ${contractAddress} ${deployer.address}`);
   console.log("2. Update frontend configuration with contract address");
   console.log("3. Test contract functionality");
 

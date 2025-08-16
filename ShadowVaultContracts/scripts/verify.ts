@@ -9,13 +9,13 @@ async function main() {
 
   if (!contractAddress) {
     console.error("❌ Please provide contract address as first argument");
-    console.log("Usage: npx hardhat run scripts/verify.ts --network baseSepolia <contract_address> <owner_address>");
+    console.log("Usage: npx hardhat run scripts/verify.ts --network zircuitGarfieldTestnet <contract_address> <owner_address>");
     process.exit(1);
   }
 
   if (!ownerAddress) {
     console.error("❌ Please provide owner address as second argument");
-    console.log("Usage: npx hardhat run scripts/verify.ts --network baseSepolia <contract_address> <owner_address>");
+    console.log("Usage: npx hardhat run scripts/verify.ts --network zircuitGarfieldTestnet <contract_address> <owner_address>");
     process.exit(1);
   }
 

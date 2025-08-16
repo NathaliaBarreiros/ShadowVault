@@ -1,9 +1,11 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@typechain/hardhat";
-import { config } from "dotenv";
+import "dotenv/config";
 
-config();
+// Securely load the private key
+const privateKey = process.env.PRIVATE_KEY;
+const accounts = privateKey ? [privateKey] : [];
 
 const hardhatConfig: HardhatUserConfig = {
   solidity: {
@@ -19,25 +21,23 @@ const hardhatConfig: HardhatUserConfig = {
     hardhat: {
       chainId: 31337,
     },
-    baseSepolia: {
-      url: process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org",
-      accounts: process.env.PRIVATE_KEY && process.env.PRIVATE_KEY.length === 64 
-        ? [process.env.PRIVATE_KEY] 
-        : [],
-      chainId: 84532,
+    zircuitGarfieldTestnet: {
+      url: process.env.ZIRCUIT_RPC_URL || "https://garfield-testnet.zircuit.com",
+      accounts: accounts,
+      chainId: 48898,
     },
   },
   etherscan: {
     apiKey: {
-      baseSepolia: process.env.BASESCAN_API_KEY || "",
+      zircuitGarfieldTestnet: "abc", // Zircuit doesn't require API key for verification
     },
     customChains: [
       {
-        network: "baseSepolia",
-        chainId: 84532,
+        network: "zircuitGarfieldTestnet",
+        chainId: 48898,
         urls: {
-          apiURL: "https://api-sepolia.basescan.org/api",
-          browserURL: "https://sepolia.basescan.org/",
+          apiURL: "https://explorer.garfield-testnet.zircuit.com/api",
+          browserURL: "https://explorer.garfield-testnet.zircuit.com/",
         },
       },
     ],

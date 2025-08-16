@@ -8,12 +8,13 @@ async function main() {
 
   if (!contractAddress) {
     console.error("❌ Please provide contract address as argument");
-    console.log("Usage: npx hardhat run scripts/interact.ts --network baseSepolia <contract_address>");
+    console.log("Usage: npx hardhat run scripts/interact.ts --network zircuitGarfieldTestnet <contract_address>");
     process.exit(1);
   }
 
   console.log("Interacting with ShadowVault contract...");
   console.log(`Contract Address: ${contractAddress}`);
+  console.log(`Explorer URL: https://explorer.garfield-testnet.zircuit.com/address/${contractAddress}`);
 
   // Get the contract instance
   const [signer] = await ethers.getSigners();
@@ -48,6 +49,12 @@ async function main() {
     // Get updated entry count
     const newEntryCount = await shadowVault.entryCount(signer.address);
     console.log(`Updated Entry Count: ${newEntryCount.toString()}`);
+    
+    // Retrieve the stored entry
+    const storedEntry = await shadowVault.getEntry(signer.address, 0);
+    console.log(`Stored Entry - Active: ${storedEntry.isActive}`);
+    console.log(`Stored Entry - Encrypted Data: ${storedEntry.encryptedData}`);
+    console.log(`Stored Entry - Metadata Hash: ${storedEntry.metadataHash}`);
     */
 
     console.log("✅ Contract interaction completed successfully!");
