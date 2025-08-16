@@ -23,6 +23,10 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
+import { useVaultEntries } from "@/hooks/useVaultEntries";
+import { usePrivy } from "@privy-io/react-auth";
+import { Skeleton } from "@/components/ui/skeleton";
+
 interface PasswordEntry {
   id: string
   name: string
@@ -39,10 +43,15 @@ interface PasswordEntry {
 
 export default function VaultPage() {
   const [searchQuery, setSearchQuery] = useState("")
+  const { user } = usePrivy();
+  const { data, isLoading, error } = useVaultEntries(user?.wallet?.address);
+
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({})
   const [copyingId, setCopyingId] = useState<string | null>(null)
 
-  const passwords: PasswordEntry[] = [
+  // --- Mock Data for Demo Purposes ---
+  // TODO: Remove this section once the indexer is fully integrated and stable.
+  const mockPasswords: PasswordEntry[] = [
     {
       id: "1",
       name: "Netflix",
@@ -82,33 +91,7 @@ export default function VaultPage() {
       isFavorite: true,
       needsUpdate: false,
     },
-    {
-      id: "4",
-      name: "Chase Bank",
-      username: "johndoe123",
-      password: "BankSecure2024$",
-      url: "chase.com",
-      network: "arbitrum",
-      aiStrength: 88,
-      lastAccessed: "3 hours ago",
-      category: "finance",
-      isFavorite: false,
-      needsUpdate: false,
-    },
-    {
-      id: "5",
-      name: "Amazon",
-      username: "john.doe@email.com",
-      password: "ShopSafe456!",
-      url: "amazon.com",
-      network: "optimism",
-      aiStrength: 78,
-      lastAccessed: "1 day ago",
-      category: "shopping",
-      isFavorite: false,
-      needsUpdate: false,
-    },
-  ]
+  ];
 
   const networkColors = {
     ethereum: "bg-blue-100 text-blue-800",
@@ -116,7 +99,7 @@ export default function VaultPage() {
     zircuit: "bg-green-100 text-green-800",
     arbitrum: "bg-orange-100 text-orange-800",
     optimism: "bg-red-100 text-red-800",
-  }
+  };
 
   const categoryIcons = {
     social: "👥",
@@ -124,28 +107,47 @@ export default function VaultPage() {
     finance: "💰",
     entertainment: "🎬",
     shopping: "🛒",
-  }
+  };
 
-  const filteredPasswords = passwords.filter(
+  // Use live data if available, otherwise fall back to mock data
+  const passwordsToDisplay = (!isLoading && !error && data?.VaultEntry)
+    ? data.VaultEntry.map(entry => ({
+        id: entry.id,
+        name: `Entry #${entry.entryId}`,
+        username: 'Fetched from metadata',
+        password: '••••••••••••',
+        url: `Hash: ${entry.metadataHash.substring(0, 10)}...`,
+        network: "ethereum", // Placeholder
+        aiStrength: 80, // Placeholder
+        lastAccessed: new Date(parseInt(entry.timestamp) * 1000).toLocaleString(),
+        category: "work", // Placeholder
+        isFavorite: false,
+        needsUpdate: false,
+    }))
+    : mockPasswords;
+
+
+  const filteredPasswords = passwordsToDisplay.filter(
     (password) =>
       password.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       password.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
       password.url.toLowerCase().includes(searchQuery.toLowerCase()),
   )
 
+
   const togglePasswordVisibility = (id: string) => {
     setShowPasswords((prev) => ({ ...prev, [id]: !prev[id] }))
   }
 
-  const copyPassword = async (password: PasswordEntry) => {
+  const copyPassword = async (password: any) => {
     setCopyingId(password.id)
-
-    // Simulate cross-chain retrieval delay
+    // In a real implementation, this is where you would call the smart contract
+    // to get the encrypted data and then decrypt it client-side.
     await new Promise((resolve) => setTimeout(resolve, 2000))
-
-    await navigator.clipboard.writeText(password.password)
+    await navigator.clipboard.writeText("Decrypted password would go here");
     setCopyingId(null)
   }
+
 
   const getStrengthColor = (strength: number) => {
     if (strength >= 80) return "text-green-600"
@@ -207,6 +209,17 @@ export default function VaultPage() {
 
         {/* Password Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {isLoading && Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader><Skeleton className="h-6 w-1/2" /></CardHeader>
+              <CardContent className="space-y-4">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-8 w-1/2" />
+              </CardContent>
+            </Card>
+          ))}
+          {error && <p className="text-red-500 col-span-full">Error fetching data, showing mock data instead: {error.message}</p>}
           {filteredPasswords.map((password) => (
             <Card key={password.id} className="relative hover:shadow-lg transition-shadow">
               {password.isFavorite && <Star className="absolute top-3 right-3 w-4 h-4 text-yellow-500 fill-current" />}
