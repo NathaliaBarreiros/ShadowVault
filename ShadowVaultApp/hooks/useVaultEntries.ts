@@ -12,6 +12,7 @@ const GET_VAULT_ENTRIES = gql`
       id
       entryId
       metadataHash
+      ipfsCid
       timestamp
       isActive
     }
@@ -22,6 +23,7 @@ interface VaultEntry {
   id: string;
   entryId: string; // BigInt is returned as a string by GraphQL
   metadataHash: string; // Bytes is returned as a hex string
+  ipfsCid: string;
   timestamp: string; // BigInt is returned as a string
   isActive: boolean;
 }

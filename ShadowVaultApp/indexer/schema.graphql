@@ -5,6 +5,7 @@ type VaultEntry @entity {
   user: Bytes! @index # The user's address
   entryId: BigInt! @index # The ID of the entry in the smart contract
   metadataHash: Bytes! # The hash of the metadata
+  ipfsCid: String! # The IPFS CID of the encrypted vault item
   timestamp: BigInt! # The timestamp of the last update
   isActive: Boolean! # Whether the entry is active or has been deleted
 }
