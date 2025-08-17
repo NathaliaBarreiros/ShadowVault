@@ -2,7 +2,14 @@
 // This module handles interactions with the deployed smart contract on Zircuit testnet
 
 import { useWriteContract, useReadContract, useWaitForTransactionReceipt } from 'wagmi';
-import { parseEther, encodePacked } from 'viem';
+import { parseEther, encodePacked, encodeFunctionData } from 'viem';
+
+// Extend window interface for ethereum
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
 
 // Contract ABI - Generated from the deployed contract
 const PASSWORD_VERIFIER_ABI = [
@@ -219,10 +226,11 @@ const PASSWORD_VERIFIER_ABI = [
 ] as const;
 
 // Contract address (deployed on Zircuit testnet)
-const PASSWORD_VERIFIER_ADDRESS = process.env.NEXT_PUBLIC_PASSWORD_VERIFIER_ADDRESS || "0x994C855086A8aeDB4828053C24fD6cBd386E9349";
+const PASSWORD_VERIFIER_ADDRESS = process.env.NEXT_PUBLIC_SHADOWVAULT_CONTRACT || "0xFfD385c7BC7645846449363825a31435DA6d2095";
 
 /**
  * Hook to verify password strength on-chain
+ * Works with both Wagmi (external wallets) and Privy (embedded wallets)
  */
 export function useVerifyPasswordStrength() {
   const { data, writeContract, isPending, error } = useWriteContract();
@@ -231,7 +239,7 @@ export function useVerifyPasswordStrength() {
     hash: data,
   });
 
-  const verifyPasswordStrength = (args: any) => {
+  const verifyPasswordStrength = async (args: any) => {
     console.log("🔍 ===== CONTRACT CALL DEBUGGING =====");
     console.log("🔍 verifyPasswordStrength called with args:", args);
     console.log("🔍 args type:", typeof args);
@@ -275,6 +283,7 @@ export function useVerifyPasswordStrength() {
       console.log("🔍 writeContract called successfully");
     } catch (error) {
       console.error("🔍 Error in writeContract call:", error);
+      // Re-throw to let the calling code handle it
       throw error;
     }
   };
@@ -492,4 +501,97 @@ export function createItemIdHash(
   );
   
   return itemIdHash;
+}
+
+/**
+ * Direct function to verify password strength using Privy wallet
+ * This bypasses Wagmi and works directly with Privy's wallet interface
+ */
+export async function verifyPasswordStrengthWithPrivy(
+  wallet: any,
+  proof: string,
+  publicInputs: string[],
+  userAddress: string
+) {
+  try {
+    console.log("🔍 ===== PRIVY WALLET TRANSACTION =====");
+    console.log("🔍 Wallet:", wallet?.connectorType, wallet?.address);
+    console.log("🔍 Wallet methods:", Object.keys(wallet || {}));
+    console.log("🔍 Contract address:", PASSWORD_VERIFIER_ADDRESS);
+    console.log("🔍 User address:", userAddress);
+    console.log("🔍 Proof length:", proof?.length);
+    console.log("🔍 Public inputs:", publicInputs);
+
+    // Encode the function data
+    const data = encodeFunctionData({
+      abi: PASSWORD_VERIFIER_ABI,
+      functionName: 'verifyPasswordStrength',
+      args: [proof, publicInputs, userAddress]
+    });
+
+    console.log("🔍 Encoded function data:", data);
+
+    // Prepare transaction with from address
+    const transaction = {
+      from: userAddress,
+      to: PASSWORD_VERIFIER_ADDRESS,
+      data: data,
+      value: '0x0',
+      gas: '0x186A0', // 100,000 gas limit (use 'gas' instead of 'gasLimit' for eth_sendTransaction)
+    };
+
+    console.log("🔍 Transaction object:", transaction);
+
+    let txHash;
+
+    // For Privy injected wallets, we need to use Privy's specific API
+    console.log("🔍 Attempting to send transaction with Privy wallet...");
+    
+    try {
+      // Check if it's an injected wallet (like MetaMask connected through Privy)
+      if (wallet.connectorType === 'injected' && wallet.walletClientType === 'metamask') {
+        console.log("🔍 Detected MetaMask via Privy - using window.ethereum");
+        
+        // For injected wallets, we need to use the global window.ethereum provider
+        if (typeof window !== 'undefined' && window.ethereum) {
+          console.log("🔍 Using window.ethereum.request");
+          txHash = await window.ethereum.request({
+            method: 'eth_sendTransaction',
+            params: [transaction],
+          });
+        } else {
+          throw new Error("window.ethereum not available for injected wallet");
+        }
+      } else {
+        // Try Privy's sendTransaction method
+        console.log("🔍 Trying direct wallet methods...");
+        
+        if (wallet.sendTransaction) {
+          console.log("🔍 Using wallet.sendTransaction method");
+          txHash = await wallet.sendTransaction(transaction);
+        } else if (wallet.request) {
+          console.log("🔍 Using wallet.request method");
+          txHash = await wallet.request({
+            method: 'eth_sendTransaction',
+            params: [transaction],
+          });
+        } else {
+          throw new Error("No suitable transaction method found");
+        }
+      }
+    } catch (error) {
+      console.error("🔍 Primary transaction method failed:", error);
+      
+      // Fallback attempts
+      const walletClientMethods = wallet.walletClient ? Object.keys(wallet.walletClient) : ['walletClient not available'];
+      throw new Error(`Transaction failed. Wallet type: ${wallet.connectorType}, Available methods: ${Object.keys(wallet || {}).join(', ')}, walletClient methods: ${walletClientMethods.join(', ')}, Original error: ${error.message}`);
+    }
+
+    console.log("✅ Transaction sent successfully:", txHash);
+    return txHash;
+
+  } catch (error) {
+    console.error("❌ Error in Privy wallet transaction:", error);
+    throw error;
+  }
 }

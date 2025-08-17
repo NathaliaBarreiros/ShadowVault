@@ -36,7 +36,7 @@ import { ShadowVaultV2Address, ShadowVaultV2ABI } from "@/lib/contracts/ShadowVa
 
 // ZK Proof functionality imports
 import { generateAndVerifyZKProof, PasswordStrengthResult } from "../../../lib/noir-integration"
-import { useVerifyPasswordStrength, useCommitVaultItem, prepareProofForVerification } from "../../../lib/contract-integration"
+import { useVerifyPasswordStrength, useCommitVaultItem, prepareProofForVerification, verifyPasswordStrengthWithPrivy } from "../../../lib/contract-integration"
 
 interface NetworkOption {
   id: string
@@ -352,7 +352,8 @@ export default function AddPasswordPage() {
   }
 
   const verifyOnChain = async () => {
-    if (!zkProof || !address) {
+    const walletAddress = getWalletAddress()
+    if (!zkProof || !walletAddress) {
       alert("Please generate ZK proof first and ensure wallet is connected")
       return
     }
@@ -367,17 +368,72 @@ export default function AddPasswordPage() {
         proofLength: proof?.length || 'undefined',
         proofType: typeof proof,
         publicInputs,
-        userAddress: address
+        userAddress: walletAddress
       })
       
-      // Call the smart contract - pass arguments directly, not wrapped in args object
-      verifyPasswordStrength({
-        proof: proof,
-        publicInputs: publicInputs,
-        user: address
+      // Debug wallet state
+      console.log("🔍 Wallet debug:", {
+        address,
+        isConnected,
+        wallets: wallets?.length || 'no wallets',
+        ready,
+        authenticated,
+        user: !!user
       })
       
-      setOnChainVerificationStatus("Transaction sent! Waiting for confirmation...")
+      // Try Wagmi first (for external wallets)
+      if (address && isConnected) {
+        console.log("🔗 Using Wagmi for external wallet...")
+        verifyPasswordStrength({
+          proof: proof,
+          publicInputs: publicInputs,
+          user: walletAddress
+        })
+      } else if (wallets && wallets.length > 0) {
+        // Use Privy wallet from wallets array
+        console.log("🔗 Using Privy embedded wallet from wallets array...")
+        const wallet = wallets.find(w => w.connectorType === 'embedded') || wallets[0]
+        console.log("🔗 Selected wallet:", wallet?.connectorType, wallet?.address)
+        
+        setOnChainVerificationStatus("Sending transaction via Privy wallet...")
+        const txHash = await verifyPasswordStrengthWithPrivy(
+          wallet,
+          proof,
+          publicInputs,
+          walletAddress
+        )
+        
+        console.log("✅ Transaction sent:", txHash)
+        setOnChainVerificationStatus(`Transaction sent! Hash: ${txHash}`)
+      } else if (user?.wallet) {
+        // Use Privy wallet from user object
+        console.log("🔗 Using Privy wallet from user object...")
+        console.log("🔗 User wallet:", user.wallet)
+        console.log("🔗 User wallet methods:", Object.keys(user.wallet || {}))
+        
+        setOnChainVerificationStatus("Sending transaction via Privy user wallet...")
+        const txHash = await verifyPasswordStrengthWithPrivy(
+          user.wallet,
+          proof,
+          publicInputs,
+          walletAddress
+        )
+        
+        console.log("✅ Transaction sent:", txHash)
+        setOnChainVerificationStatus(`Transaction sent! Hash: ${txHash}`)
+      } else {
+        console.error("🔍 No wallet found:", {
+          address,
+          isConnected,
+          walletsLength: wallets?.length,
+          wallets,
+          userWallet: user?.wallet,
+          ready,
+          authenticated
+        })
+        throw new Error("No wallet available for transaction")
+      }
+      
     } catch (error) {
       console.error("❌ Error verifying on-chain:", error)
       setOnChainVerificationStatus("Error: " + (error as Error).message)
@@ -385,7 +441,8 @@ export default function AddPasswordPage() {
   }
 
   const savePasswordWithVerification = async () => {
-    if (!zkProof || !address) {
+    const walletAddress = getWalletAddress()
+    if (!zkProof || !walletAddress) {
       alert("Please generate ZK proof first and ensure wallet is connected")
       return
     }
@@ -880,13 +937,13 @@ export default function AddPasswordPage() {
                       <div className="space-y-3">
                         {/* Debug info */}
                         <div className="text-xs text-muted-foreground">
-                          Debug: zkVerified={zkVerified}, address={address ? 'connected' : 'not connected'}, isVerifyingOnChain={isVerifyingOnChain}
+                          Debug: zkVerified={zkVerified}, walletAddress={currentWalletAddress || 'not connected'}, isVerifyingOnChain={isVerifyingOnChain}
                         </div>
                         <Button
                           type="button"
                           variant="outline"
                           onClick={verifyOnChain}
-                          disabled={isVerifyingOnChain || !address}
+                          disabled={isVerifyingOnChain || !currentWalletAddress}
                           className="w-full"
                         >
                           {isVerifyingOnChain ? (
@@ -932,7 +989,7 @@ export default function AddPasswordPage() {
                                         size="sm"
                                         className="h-6 px-2 text-xs text-green-600 hover:text-green-800"
                                         onClick={() => {
-                                          const explorerUrl = `https://sepolia.basescan.org/tx/${transactionHash}`;
+                                          const explorerUrl = `https://explorer.garfield-testnet.zircuit.com/tx/${transactionHash}`;
                                           window.open(explorerUrl, '_blank');
                                         }}
                                       >
