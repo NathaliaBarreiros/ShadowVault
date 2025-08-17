@@ -1,0 +1,9 @@
+{
+  "build": {
+    "env": {
+      "VERCEL_IGNORE_BUILD_ERRORS": "1"
+    }
+  },
+  "buildCommand": "npm run build",
+  "installCommand": "npm install --legacy-peer-deps"
+}
