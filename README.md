@@ -9,7 +9,7 @@
 **MVP Scope (hackathon):**
 - Local encryption (HKDF + AES-256-GCM).
 - On-chain anchoring of **Merkle roots** and content pointers on **Zircuit testnet**.
-- Optional ciphertext backup to **IPFS** (per-item or bundle CID).
+- Optional ciphertext backup to **Walrus** (per-item or bundle CID).
 - Event indexing with **Envio**; UI queries Envio on demand.
 - Contracts authored & deployed using **Nora Agent**.
 - No plaintext usernames/passwords on-chain or in the indexer.
@@ -22,7 +22,7 @@
 Next.js Web App (React/TypeScript)
   ├─ Crypto: WebCrypto (HKDF KDF, AES-256-GCM)
   ├─ Local Vault: IndexedDB + Export/Import (encrypted JSON/CSV)
-  ├─ Optional Backup: IPFS (ciphertext only, returns CID)
+  ├─ Optional Backup: Walrus (ciphertext only, returns CID)
   ├─ Identity/Wallet: Privy (Embedded Wallets)
   └─ RPC: Zircuit testnet
 
@@ -39,7 +39,7 @@ Indexing (Envio)
 
 **Key Patterns**
 - **Commit–Reveal (without reveal):** Only salted hashes/Merkle roots + CIDs on-chain.
-- **Index-then-verify:** Query Envio → fetch ciphertext (IPFS) → recompute + compare local root.
+- **Index-then-verify:** Query Envio → fetch ciphertext (Walrus) → recompute + compare local root.
 
 ---
 
@@ -62,6 +62,16 @@ interface VaultItemCipher {
     timestamp: string;
   }
 }
+
+// On-chain data (no sensitive content):
+interface ZircuitObject {
+  user: string;                 // user address
+  itemIdHash: string;           // keccak256(salt + domain + username)
+  itemCommitment: string;       // keccak256(itemIdHash + walrusCid + encryptionKeyHash)
+  walrusCid: string;             // Walrus CID of the VaultItemCipher
+  encryptionKeyHash: string;    // SHA-256 of encryption key
+  timestamp: string;           // ISO timestamp
+}
 ```
 
 **Keys**
@@ -78,12 +88,29 @@ interface VaultItemCipher {
 5. Key is used for AES-256-GCM encryption of password
 
 **Commitments (on-chain)**
-- `itemIdHash = keccak256( salt_item || domain || username_hint )`
-- `itemCommitment = keccak256( itemIdHash || cipher_cid || encryption_key_hash )`
+- `itemIdHash = keccak256( commitmentSalt + domain + username )`
+- `itemCommitment = keccak256( itemIdHash + walrusCid + encryptionKeyHash )`
 - `vaultRoot = merkleRoot( itemCommitment[] )`
+
+**Implementation Details**
+- **Commitment Salt**: 32-byte random salt generated for each item
+- **Walrus Upload**: VaultItemCipher uploaded to Walrus using walrus-http-client or Pinata API
+- **Smart Contract**: ZircuitObject submitted to VaultRegistry contract on Zircuit testnet
 
 **Privacy levels**
 1) Opaque labels; 2) Label-only (hashed username); 3) Local convenience (plaintext labels stay local).
+
+---
+
+## 3.1 Zero-Knowledge Proofs in ShadowVault
+
+A key differentiator of ShadowVault is its use of **Zero-Knowledge Proofs (ZKPs)** to prove correct cryptographic operations without revealing secrets.
+
+- **Password generation policies:** Users can prove that a generated or chosen password meets complexity rules (e.g., ≥12 chars, ≥3 character classes) without exposing the password itself.
+- **Encryption correctness:** The extension can prove that a ciphertext corresponds to a committed plaintext under a given key, without revealing the plaintext or key.
+- **Decryption integrity:** Similarly, users can prove that decryption of a ciphertext yields a valid result consistent with prior commitments, without revealing the actual decrypted value.
+
+This ensures that password strength and encryption/decryption correctness are **publicly verifiable on-chain** (via Zircuit) while the underlying secrets remain completely private.
 
 ---
 
@@ -136,35 +163,31 @@ Envio serves as a high-performance indexing layer that reads events from the `Sh
 ## 6) End-to-End Flows
 
 **Add / Update**
-1) User logs in via **Privy** with embedded wallet.
-2) User creates new password entry in web UI.
-3) Client derives encryption key from wallet signature using HKDF.
-4) Password is encrypted with AES-256-GCM using derived key + random IV.
-5) VaultItemCipher is created with encrypted password and metadata.
-6) Compute `itemIdHash`, `itemCommitment`.
-7) Push ciphertext(s) to **IPFS** → get CID(s).
-8) Anchor via contract → emits `VaultVersionAnchored` (+ optional per-item events).
-9) **Envio** indexes; UI refreshes by querying Envio.
+1) User edits/creates item → encrypt locally.  
+2) Compute `itemIdHash`, `itemCommitment`.  
+3) Push ciphertext(s) to **Walrus decentralized nodes** → get CID(s).  
+4) Anchor via contract → emits `VaultVersionAnchored` (+ optional per-item events).  
+5) **Envio** indexes; UI refreshes by querying Envio.
 
 **Verify (auditor/self)**
-1) Query Envio → get `vaultRoot` + `bundleCID`.
-2) Fetch bundle from IPFS → recompute root.
+1) Query Envio → get `vaultRoot` + `bundleCID`.  
+2) Fetch bundle from Walrus → recompute root.  
 3) Compare roots; check monotonic version timestamps.
 
 **Export/Import**
-- Export encrypted JSON/CSV (no keys).
+- Export encrypted JSON/CSV (no keys).  
 - Import → validate → re-derive commitments → anchor as new version.
 
 **Recovery (optional demo)**
-- Encryption key can be re-derived from wallet signature at any time.
+- Wrap MK with Lit PKP or Privy-gated capsule; unwrap locally to restore DEK.
 
 ---
 
 ## 7) Security & Threat Model (MVP)
 
 **Protects against**
-- Server/indexer compromise (no plaintext off-device).
-- On-chain scraping (only salted hashes + CIDs).
+- Server/indexer compromise (no plaintext off-device).  
+- On-chain scraping (only salted hashes + CIDs).  
 - Rollback (monotonic version anchors).
 
 **Out of scope (MVP)**
@@ -180,7 +203,7 @@ Envio serves as a high-performance indexing layer that reads events from the `Sh
 - **Nora Agent** access (author/deploy contracts)
 - **Envio** account & processor config
 - **Privy** app (client SDK)
-- IPFS client (e.g., `ipfs-http-client` or Pinata key)
+- Walrus client (e.g., `walrus-http-client` or Pinata key)
 - Git
 
 ### 8.2 Environment
@@ -189,7 +212,7 @@ Create `.env` with:
 ZIRCUIT_RPC_URL=...
 WALLET_PRIVATE_KEY=...
 PRIVY_APP_ID=...
-IPFS_API_URL=...           # or PINATA_JWT=...
+Walrus_API_URL=...           # or WALRUS_KEY=...
 ENVIO_API_URL=...          # your Envio query endpoint
 ```
 *(Never commit secrets.)*
@@ -217,7 +240,7 @@ npm run dev:ext
 - Deploy processor; note `ENVIO_API_URL` for the UI.
 
 ### 8.6 Demo Script
-- Create 3 mock credentials → encrypt & bundle to IPFS.  
+- Create 3 mock credentials → encrypt & bundle to Walrus.  
 - Anchor version; observe Nora tx on Zircuit.  
 - Query Envio for latest version; fetch bundle; recompute root locally.  
 - Export → wipe local → import → re-anchor.  
@@ -244,4 +267,4 @@ MIT — see `LICENSE`.
 - **Envio** (indexing & query)  
 - **Zircuit** (L2 for fast, cheap verification)  
 - **Privy** (identity/wallet)  
-- **IPFS** (ciphertext backups)
+- **Walrus** (ciphertext backups)

@@ -1,27 +1,42 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
 import {
   Shield,
+  Plus,
   Search,
-  Copy,
   Eye,
   EyeOff,
+  Copy,
+  ExternalLink,
+  Lock,
+  Unlock,
+  Download,
+  Upload,
+  Settings,
+  Sparkles,
+  ArrowLeft,
+  Filter,
+  Star,
+  AlertTriangle,
   Globe,
   Zap,
-  Star,
-  Filter,
-  Plus,
-  ArrowLeft,
-  AlertTriangle,
-  Clock,
+  Clock
 } from "lucide-react"
 import Link from "next/link"
+import { useAccount, useSignMessage } from "wagmi"
+import {
+  deriveEncryptionKeyFromSignature,
+  getVaultItemsFromEnvio,
+  retrieveAndDecryptVaultItem
+} from "@/lib/encryption"
 
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -328,6 +343,117 @@ export default function VaultPage() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// Add this function to demonstrate decryption
+async function loadAndDecryptVaultItems(userAddress: string) {
+  console.log('[Vault] Starting to load and decrypt vault items...')
+
+  try {
+    // Step 1: Get vault items from Envio (ZircuitObject[])
+    const zircuitObjects = await getVaultItemsFromEnvio(userAddress)
+    console.log('[Vault] Retrieved', zircuitObjects.length, 'vault items from Envio')
+
+    // Step 2: For each item, derive encryption key and decrypt
+    const decryptedItems = []
+
+    for (const zircuitObject of zircuitObjects) {
+      console.log('[Vault] Processing item:', zircuitObject.ipfsCid)
+
+      // Step 2.1: Derive encryption key from wallet signature
+      const message = "Generate encryption key for ShadowVault session"
+      // Note: In real implementation, you'd need to get the signature again
+      // For demo, we'll use a mock signature
+      const mockSignature = "0x" + "a".repeat(130) // Mock signature
+
+      const { rawKey } = await deriveEncryptionKeyFromSignature(mockSignature, userAddress)
+      console.log('[Vault] Encryption key derived for item')
+
+      // Step 2.2: Retrieve and decrypt VaultItemCipher from IPFS
+      const { vaultItem, decryptedPassword } = await retrieveAndDecryptVaultItem(
+        zircuitObject.ipfsCid,
+        rawKey
+      )
+
+      console.log('[Vault] Item decrypted successfully:', {
+        site: vaultItem.site,
+        username: vaultItem.username,
+        password: decryptedPassword.slice(0, 8) + '...', // Only show first 8 chars for security
+        category: vaultItem.meta.category,
+        network: vaultItem.meta.network
+      })
+
+      decryptedItems.push({
+        ...vaultItem,
+        decryptedPassword,
+        zircuitObject
+      })
+    }
+
+    console.log('[Vault] All items decrypted successfully')
+    return decryptedItems
+
+  } catch (error) {
+    console.error('[Vault] Error loading and decrypting vault items:', error)
+    throw error
+  }
+}
+
+// Example usage in a component:
+function VaultDecryptionDemo() {
+  const { address } = useAccount()
+  const [decryptedItems, setDecryptedItems] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleLoadVault = async () => {
+    if (!address) {
+      console.error('No wallet address available')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const items = await loadAndDecryptVaultItems(address)
+      setDecryptedItems(items)
+      console.log('[Vault] Vault loaded successfully with', items.length, 'items')
+    } catch (error) {
+      console.error('[Vault] Failed to load vault:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Button
+        onClick={handleLoadVault}
+        disabled={isLoading || !address}
+        className="w-full"
+      >
+        {isLoading ? 'Loading Vault...' : 'Load & Decrypt Vault Items'}
+      </Button>
+
+      {decryptedItems.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold">Decrypted Items:</h3>
+          {decryptedItems.map((item, index) => (
+            <Card key={index} className="p-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h4 className="font-medium">{item.site}</h4>
+                  <p className="text-sm text-muted-foreground">{item.username}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Password: {item.decryptedPassword.slice(0, 8)}...
+                  </p>
+                </div>
+                <Badge variant="secondary">{item.meta.category}</Badge>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
