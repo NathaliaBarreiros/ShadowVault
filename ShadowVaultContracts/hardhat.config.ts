@@ -7,13 +7,26 @@ config();
 
 const hardhatConfig: HardhatUserConfig = {
   solidity: {
-    version: "0.8.24",
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 200,
+    compilers: [
+      {
+        version: "0.8.24",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
       },
-    },
+      {
+        version: "0.8.27",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      },
+    ],
   },
   networks: {
     hardhat: {
@@ -25,6 +38,13 @@ const hardhatConfig: HardhatUserConfig = {
         ? [process.env.PRIVATE_KEY] 
         : [],
       chainId: 84532,
+    },
+    zircuitTestnet: {
+      url: process.env.ZIRCUIT_RPC_URL || "https://rpc.zircuit.com",
+      accounts: process.env.PRIVATE_KEY && process.env.PRIVATE_KEY.length === 64 
+        ? [process.env.PRIVATE_KEY] 
+        : [],
+      chainId: 48898,
     },
   },
   etherscan: {

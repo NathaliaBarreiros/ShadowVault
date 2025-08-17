@@ -22,9 +22,13 @@ import {
   AlertCircle,
   CheckCircle,
   Copy,
+  Lock,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { generateAndVerifyZKProof, PasswordStrengthResult } from "../../../lib/noir-integration"
+import { useVerifyPasswordStrength, useCommitVaultItem, prepareProofForVerification } from "../../../lib/contract-integration"
+import { useAccount } from "wagmi"
 
 interface NetworkOption {
   id: string
@@ -36,6 +40,22 @@ interface NetworkOption {
 
 export default function AddPasswordPage() {
   const router = useRouter()
+  const { address } = useAccount()
+  
+  // Contract integration hooks
+  const { 
+    verifyPasswordStrength, 
+    isPending: isVerifyingOnChain, 
+    isSuccess: onChainVerificationSuccess,
+    error: onChainError 
+  } = useVerifyPasswordStrength()
+  
+  const { 
+    commitVaultItem, 
+    isPending: isCommitting, 
+    isSuccess: commitSuccess 
+  } = useCommitVaultItem()
+  
   const [formData, setFormData] = useState({
     name: "",
     username: "",
@@ -52,6 +72,10 @@ export default function AddPasswordPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([])
+  const [zkProof, setZkProof] = useState<any>(null)
+  const [zkVerified, setZkVerified] = useState<boolean | null>(null)
+  const [isGeneratingZK, setIsGeneratingZK] = useState(false)
+  const [onChainVerificationStatus, setOnChainVerificationStatus] = useState<string>("")
 
   const networks: NetworkOption[] = [
     { id: "zircuit", name: "Zircuit", speed: "Fastest", cost: "Low", color: "bg-green-100 text-green-800" },
@@ -144,6 +168,105 @@ export default function AddPasswordPage() {
 
   const copyPassword = async () => {
     await navigator.clipboard.writeText(formData.password)
+  }
+
+  const generateZKProof = async () => {
+    if (!formData.password) return
+    
+    setIsGeneratingZK(true)
+    setZkProof(null)
+    setZkVerified(null)
+    
+    try {
+      const result = await generateAndVerifyZKProof(formData.password)
+      console.log('🔐 ZK Proof result:', result)
+      console.log('🔐 result.isValid:', result.isValid)
+      console.log('🔐 result.proof:', result.proof)
+      
+      setZkProof(result.proof)
+      setZkVerified(result.isValid)
+      
+      console.log('🔐 ZK Proof generated successfully:', result)
+      console.log('🔐 Setting zkVerified to:', result.isValid)
+      
+      // Force state update
+      setTimeout(() => {
+        console.log('🔐 zkVerified after timeout:', result.isValid)
+        setZkVerified(result.isValid)
+      }, 100)
+    } catch (error) {
+      console.error('❌ Error generating ZK proof:', error)
+      setZkVerified(false)
+    } finally {
+      setIsGeneratingZK(false)
+    }
+  }
+
+  const verifyOnChain = async () => {
+    if (!zkProof || !address) {
+      alert("Please generate ZK proof first and ensure wallet is connected")
+      return
+    }
+
+    try {
+      setOnChainVerificationStatus("Preparing proof for blockchain...")
+      
+      // Prepare proof data for on-chain verification
+      const { proof, publicInputs } = prepareProofForVerification(zkProof)
+      
+      console.log("🔗 Sending proof to Zircuit testnet...", {
+        proofLength: proof?.length || 'undefined',
+        proofType: typeof proof,
+        publicInputs,
+        userAddress: address
+      })
+      
+      // Call the smart contract
+      verifyPasswordStrength({
+        args: [proof, publicInputs, address]
+      })
+      
+      setOnChainVerificationStatus("Transaction sent! Waiting for confirmation...")
+    } catch (error) {
+      console.error("❌ Error verifying on-chain:", error)
+      setOnChainVerificationStatus("Error: " + (error as Error).message)
+    }
+  }
+
+  const savePasswordWithVerification = async () => {
+    if (!zkProof || !address) {
+      alert("Please generate ZK proof first and ensure wallet is connected")
+      return
+    }
+
+    try {
+      setIsSaving(true)
+      
+      // TODO: Step 1: Create VaultItemCipher (encryption)
+      // TODO: Step 2: Upload to IPFS
+      // TODO: Step 3: Create ZircuitObject
+      
+      // For now, we'll just verify the password strength on-chain
+      const { proof, publicInputs } = prepareProofForVerification(zkProof)
+      
+      // Mock data for demonstration
+      const itemIdHash = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+      const itemCommitment = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      const itemCipherCID = "QmMockCidForDemonstration"
+      
+      console.log("🔗 Committing vault item to Zircuit testnet...")
+      
+      // Commit to smart contract
+      commitVaultItem({
+        args: [itemIdHash, itemCommitment, itemCipherCID, proof, publicInputs]
+      })
+      
+    } catch (error) {
+      console.error("❌ Error saving password:", error)
+      alert("Error saving password: " + (error as Error).message)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleSave = async () => {
@@ -239,19 +362,42 @@ export default function AddPasswordPage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password *</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={generatePassword} disabled={isGenerating}>
-                    {isGenerating ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-4 h-4 mr-2" />
-                        Generate Strong Password
-                      </>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={generatePassword} disabled={isGenerating}>
+                      {isGenerating ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-4 h-4 mr-2" />
+                          Generate Strong Password
+                        </>
+                      )}
+                    </Button>
+                    {formData.password && (
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={generateZKProof} 
+                        disabled={isGeneratingZK}
+                      >
+                        {isGeneratingZK ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            Generating ZK Proof...
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-4 h-4 mr-2" />
+                            Generate ZK Proof
+                          </>
+                        )}
+                      </Button>
                     )}
-                  </Button>
+                  </div>
                 </div>
 
                 <div className="relative">
@@ -299,6 +445,110 @@ export default function AddPasswordPage() {
                             </ul>
                           </div>
                         </div>
+                      </div>
+                    )}
+
+                    {/* ZK Proof Result */}
+                    {zkVerified !== null && (
+                      <div className={`border rounded-lg p-3 ${
+                        zkVerified 
+                          ? 'bg-green-50 border-green-200' 
+                          : 'bg-red-50 border-red-200'
+                      }`}>
+                        <div className="flex items-start gap-2">
+                          {zkVerified ? (
+                            <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                          )}
+                          <div>
+                            <p className={`text-sm font-medium ${
+                              zkVerified ? 'text-green-800' : 'text-red-800'
+                            }`}>
+                              {zkVerified ? 'ZK Proof Valid' : 'ZK Proof Failed'}
+                            </p>
+                            <p className={`text-sm ${
+                              zkVerified ? 'text-green-700' : 'text-red-700'
+                            }`}>
+                              {zkVerified 
+                                ? 'Password strength verified with Zero-Knowledge proof'
+                                : 'Password does not meet strength criteria for ZK proof'
+                              }
+                            </p>
+                            {zkProof && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Circuit Hash: {zkProof.circuitHash}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* On-Chain Verification */}
+                    {zkVerified === true && (
+                      <div className="space-y-3">
+                        {/* Debug info */}
+                        <div className="text-xs text-muted-foreground">
+                          Debug: zkVerified={zkVerified}, address={address ? 'connected' : 'not connected'}, isVerifyingOnChain={isVerifyingOnChain}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={verifyOnChain}
+                          disabled={isVerifyingOnChain || !address}
+                          className="w-full"
+                        >
+                          {isVerifyingOnChain ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                              Verifying on Zircuit...
+                            </>
+                          ) : (
+                            <>
+                              <Globe className="w-4 h-4 mr-2" />
+                              Verify on Zircuit Testnet
+                            </>
+                          )}
+                        </Button>
+
+                        {onChainVerificationStatus && (
+                          <div className="text-sm text-muted-foreground">
+                            {onChainVerificationStatus}
+                          </div>
+                        )}
+
+                        {onChainVerificationSuccess && (
+                          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                            <div className="flex items-start gap-2">
+                              <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <p className="text-sm font-medium text-green-800">
+                                  ✅ Verified on Zircuit Testnet!
+                                </p>
+                                <p className="text-sm text-green-700">
+                                  Password strength proof verified on-chain
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {onChainError && (
+                          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                            <div className="flex items-start gap-2">
+                              <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <p className="text-sm font-medium text-red-800">
+                                  ❌ On-Chain Verification Failed
+                                </p>
+                                <p className="text-sm text-red-700">
+                                  {onChainError.message}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
