@@ -149,6 +149,15 @@ interface IShadowVaultRegistry {
 
 > Actual endpoints depend on your Envio processor configuration.
 
+### Role and Value Proposition
+
+Envio serves as a high-performance indexing layer that reads events from the `ShadowVault` smart contract and transforms them into a queryable GraphQL API. Its role is critical for both performance and security:
+
+-   **Performance:** It provides a fast, off-chain API for fetching lists of vault entries. This avoids costly and slow direct contract calls (e.g., iterating through arrays in storage), leading to a snappy user experience.
+-   **Cost-Effectiveness:** Reading data from the Envio API is free for the end-user, whereas querying data directly from the blockchain can incur gas fees or RPC provider costs.
+-   **Preservation of Privacy:** The indexer is configured to only handle non-sensitive metadata emitted in events. No encrypted passwords or private user data ever pass through or are stored by Envio, aligning with the project's privacy-first principles.
+
+
 ---
 
 ## 6) End-to-End Flows
