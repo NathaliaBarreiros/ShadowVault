@@ -508,7 +508,7 @@ async function loadAndDecryptVaultItems(userAddress: string) {
     const decryptedItems = []
 
     for (const zircuitObject of zircuitObjects) {
-      console.log('[Vault] Processing item:', zircuitObject.ipfsCid)
+      console.log('[Vault] Processing item:', zircuitObject.walrusCid)
 
       // Step 2.1: Derive encryption key from wallet signature
       const message = "Generate encryption key for ShadowVault session"
@@ -519,9 +519,9 @@ async function loadAndDecryptVaultItems(userAddress: string) {
       const { rawKey } = await deriveEncryptionKeyFromSignature(mockSignature, userAddress)
       console.log('[Vault] Encryption key derived for item')
 
-      // Step 2.2: Retrieve and decrypt VaultItemCipher from IPFS
+      // Step 2.2: Retrieve and decrypt VaultItemCipher from Walrus
       const { vaultItem, decryptedPassword } = await retrieveAndDecryptVaultItem(
-        zircuitObject.ipfsCid,
+        zircuitObject.walrusCid,
         rawKey
       )
 

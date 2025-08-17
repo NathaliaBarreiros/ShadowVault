@@ -342,13 +342,10 @@ export default function AddPasswordPage() {
       // const { config } = usePrepareContractWrite({
       //   address: '0x...', // VaultRegistry contract address on Zircuit
       //   abi: VaultRegistryABI,
-      //   functionName: 'storeVaultItem',
+      //   functionName: 'storePassword',
       //   args: [
-      //     zircuitObject.user,           // address user
-      //     zircuitObject.itemIdHash,     // bytes32 itemIdHash
-      //     zircuitObject.itemCommitment, // bytes32 itemCommitment
-      //     zircuitObject.ipfsCid,        // string ipfsCid
-      //     zircuitObject.encryptionKeyHash // bytes32 encryptionKeyHash
+      //     zircuitObject.storedHash,     // bytes32 storedHash (hash of password)
+      //     zircuitObject.walrusCid       // string walrusCid (CID from Walrus)
       //   ]
       // })
       // 

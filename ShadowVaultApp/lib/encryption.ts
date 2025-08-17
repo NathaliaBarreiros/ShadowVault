@@ -225,19 +225,17 @@ export async function createZircuitObject(
 
 /*
 DECRYPTION FLOW:
-1. Get ZircuitObjects from Envio (contains IPFS CIDs and hashes)
+1. Get ZircuitObjects from Envio (contains Walrus CIDs and hashes)
 2. For each ZircuitObject:
    a. Derive encryption key from wallet signature (same process as encryption)
-   b. Fetch VaultItemCipher from IPFS using CID
-   c. Verify encryption key hash matches
-   d. Decrypt password using AES-GCM with derived key + IV
-   e. Return decrypted data
+   b. Fetch VaultItemCipher from Walrus using CID
+   c. Decrypt password using AES-GCM with derived key + IV
+   d. Return decrypted data
 
 SECURITY NOTES:
 - Encryption key is re-derived from wallet signature (deterministic)
 - VaultItemCipher contains encrypted password + metadata
 - Only password is encrypted, metadata stays plaintext for usability
-- Encryption key hash verification prevents tampering
 */
 
 export function base64ToBytes(base64: string): Uint8Array {
@@ -321,52 +319,37 @@ SECURITY CHECKS:
 
 USAGE:
 const { vaultItem, decryptedPassword } = await retrieveAndDecryptVaultItem(
-  zircuitObject.ipfsCid,  // IPFS CID from ZircuitObject
-  derivedEncryptionKey    // Uint8Array from HKDF
+  zircuitObject.walrusCid,  // Walrus CID from ZircuitObject
+  derivedEncryptionKey      // Uint8Array from HKDF
 )
 */
 export async function retrieveAndDecryptVaultItem(
-  ipfsCid: string,
+  walrusCid: string,
   encryptionKey: Uint8Array
 ): Promise<{
   vaultItem: VaultItemCipher;
   decryptedPassword: string;
 }> {
-  console.log('[Decryption] Retrieving VaultItemCipher from IPFS...')
+  console.log('[Decryption] Retrieving VaultItemCipher from Walrus...')
   
   /*
-  // REAL IPFS RETRIEVAL IMPLEMENTATION:
+  // REAL WALRUS RETRIEVAL IMPLEMENTATION:
   // 
-  // Option 1: IPFS HTTP Client (Infura)
-  // const ipfs = create({ 
-  //   host: 'ipfs.infura.io', 
-  //   port: 5001, 
-  //   protocol: 'https',
-  //   headers: {
-  //     authorization: 'Basic ' + Buffer.from(process.env.IPFS_PROJECT_ID + ':' + process.env.IPFS_PROJECT_SECRET).toString('base64')
-  //   }
-  // })
-  // const chunks = []
-  // for await (const chunk of ipfs.cat(ipfsCid)) {
-  //   chunks.push(chunk)
-  // }
-  // const vaultItemBuffer = Buffer.concat(chunks)
+  // Option 1: Walrus HTTP Client
+  // const response = await fetch(`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${walrusCid}`)
+  // const vaultItemBuffer = await response.arrayBuffer()
+  // const vaultItemJson = new TextDecoder().decode(vaultItemBuffer)
+  // const vaultItem: VaultItemCipher = JSON.parse(vaultItemJson)
+  // 
+  // Option 2: Walrus SDK (if available)
+  // const walrusClient = new WalrusClient(config)
+  // const vaultItemBuffer = await walrusClient.retrieve(walrusCid)
   // const vaultItemJson = vaultItemBuffer.toString('utf8')
-  // const vaultItem: VaultItemCipher = JSON.parse(vaultItemJson)
-  // 
-  // Option 2: Pinata Gateway
-  // const response = await fetch(`https://gateway.pinata.cloud/ipfs/${ipfsCid}`)
-  // const vaultItemJson = await response.text()
-  // const vaultItem: VaultItemCipher = JSON.parse(vaultItemJson)
-  // 
-  // Option 3: Public IPFS Gateway
-  // const response = await fetch(`https://ipfs.io/ipfs/${ipfsCid}`)
-  // const vaultItemJson = await response.text()
   // const vaultItem: VaultItemCipher = JSON.parse(vaultItemJson)
   */
   
   // For demo purposes, we'll use a mock VaultItemCipher
-  // In real implementation, fetch from IPFS using one of the methods above
+  // In real implementation, fetch from Walrus using one of the methods above
   const mockVaultItem: VaultItemCipher = {
     v: 1,
     site: "example.com",
@@ -382,7 +365,7 @@ export async function retrieveAndDecryptVaultItem(
     }
   }
   
-  console.log('[Decryption] VaultItemCipher retrieved from IPFS')
+  console.log('[Decryption] VaultItemCipher retrieved from Walrus')
   
   // Decrypt the password
   const decryptedPassword = await decryptPasswordWithAES(
@@ -418,10 +401,8 @@ export async function getVaultItemsFromEnvio(
   //         vaultItems(where: { owner: $owner }) {
   //           id
   //           owner
-  //           itemIdHash
-  //           itemCommitment
-  //           ipfsCid
-  //           encryptionKeyHash
+  //           storedHash
+  //           walrusCid
   //           timestamp
   //         }
   //       }
@@ -462,7 +443,7 @@ COMPLETE DECRYPTION PROCESS:
 
 1. GET VAULT ITEMS FROM ENVIO:
    const zircuitObjects = await getVaultItemsFromEnvio(userAddress)
-   // Returns: Array of ZircuitObjects with IPFS CIDs and hashes
+   // Returns: Array of ZircuitObjects with Walrus CIDs and hashes
 
 2. FOR EACH VAULT ITEM:
    
@@ -471,9 +452,9 @@ COMPLETE DECRYPTION PROCESS:
    const signature = await signMessageAsync({ message })
    const { rawKey } = await deriveEncryptionKeyFromSignature(signature, userAddress)
    
-   b. RETRIEVE FROM IPFS:
+   b. RETRIEVE FROM WALRUS:
    const { vaultItem, decryptedPassword } = await retrieveAndDecryptVaultItem(
-     zircuitObject.ipfsCid,
+     zircuitObject.walrusCid,
      rawKey
    )
    
@@ -486,10 +467,9 @@ COMPLETE DECRYPTION PROCESS:
 SECURITY FLOW:
 1. Envio → ZircuitObjects (no sensitive data)
 2. Wallet → Signature → Encryption Key (deterministic)
-3. IPFS → VaultItemCipher (encrypted content)
-4. Verification → Key hash check
-5. Decryption → AES-GCM with key + IV
-6. Result → Plaintext password + metadata
+3. Walrus → VaultItemCipher (encrypted content)
+4. Decryption → AES-GCM with key + IV
+5. Result → Plaintext password + metadata
 
 ERROR HANDLING:
 - Invalid signature → Cannot derive key
@@ -514,7 +494,7 @@ async function loadUserVault(userAddress: string) {
       
       // Retrieve and decrypt
       const { vaultItem, decryptedPassword } = await retrieveAndDecryptVaultItem(
-        zircuitObject.ipfsCid,
+        zircuitObject.walrusCid,
         rawKey
       )
       

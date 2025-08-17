@@ -53,7 +53,6 @@ interface VaultItemCipher {
   username: string;             // username (plaintext) 
   cipher: string;               // base64 AES-GCM ciphertext (password encriptado)
   iv: string;                   // 12-byte IV (base64)
-  encryptionKeyHash: string;    // SHA-256 de la clave derivada (para verificación)
   meta: {
     url?: string;
     notes?: string;
@@ -65,12 +64,8 @@ interface VaultItemCipher {
 
 // On-chain data (no sensitive content):
 interface ZircuitObject {
-  user: string;                 // user address
-  itemIdHash: string;           // keccak256(salt + domain + username)
-  itemCommitment: string;       // keccak256(itemIdHash + walrusCid + encryptionKeyHash)
-  walrusCid: string;             // Walrus CID of the VaultItemCipher
-  encryptionKeyHash: string;    // SHA-256 of encryption key
-  timestamp: string;           // ISO timestamp
+  storedHash: string;           // SHA-256 hash of the password
+  walrusCid: string;           // Walrus CID of the VaultItemCipher
 }
 ```
 
@@ -88,13 +83,12 @@ interface ZircuitObject {
 5. Key is used for AES-256-GCM encryption of password
 
 **Commitments (on-chain)**
-- `itemIdHash = keccak256( commitmentSalt + domain + username )`
-- `itemCommitment = keccak256( itemIdHash + walrusCid + encryptionKeyHash )`
-- `vaultRoot = merkleRoot( itemCommitment[] )`
+- `storedHash = SHA256( password )`
+- `walrusCid = Walrus blob ID`
 
 **Implementation Details**
-- **Commitment Salt**: 32-byte random salt generated for each item
-- **Walrus Upload**: VaultItemCipher uploaded to Walrus using walrus-http-client or Pinata API
+- **Password Hash**: SHA-256 hash of the password for verification
+- **Walrus Upload**: VaultItemCipher uploaded to Walrus using walrus-http-client
 - **Smart Contract**: ZircuitObject submitted to VaultRegistry contract on Zircuit testnet
 
 **Privacy levels**
@@ -139,13 +133,11 @@ interface IShadowVaultRegistry {
 
 **Entities**
 - **User**: `{ address }`
-- **VaultVersion**: `{ owner, version, vaultRoot, bundleCID, timestamp }`
-- **VaultItem**: `{ owner, version, itemIdHash, itemCommitment, itemCipherCID, revoked? }`
+- **VaultItem**: `{ owner, storedHash, walrusCid, timestamp }`
 
 **Queries (conceptual)**
-- Latest version: `/vaultVersions?owner=0x..&sort=desc&limit=1`
-- Items of a version: `/vaultItems?owner=0x..&version=N`
-- Find item: `/vaultItems?itemIdHash=0x..`
+- User items: `/vaultItems?owner=0x..`
+- Find item: `/vaultItems?storedHash=0x..`
 
 > Actual endpoints depend on your Envio processor configuration.
 
