@@ -1,6 +1,7 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@typechain/hardhat";
+import "@xtools-at/hardhat-sourcify";
 import "dotenv/config";
 
 // Securely load the private key
