@@ -2,12 +2,12 @@
 
 ## 1) Project Overview
 
-**One-liner:** A browser extension that stores credentials as encrypted data, anchors tamper-proof commitments on-chain, and serves verifiable, queryable state via an indexer — without ever exposing plaintext secrets.
+**One-liner:** A Next.js web application that stores credentials as encrypted data, anchors tamper-proof commitments on-chain, and serves verifiable, queryable state via an indexer — without ever exposing plaintext secrets.
 
 **Why it matters:** Traditional managers require trust in centralized services. ShadowVault proves integrity and recency of your encrypted vault using **on-chain commitments** and **Envio-indexed events**, keeping secrets private end-to-end.
 
 **MVP Scope (hackathon):**
-- Local encryption (Argon2id + AES-256-GCM).
+- Local encryption (HKDF + AES-256-GCM).
 - On-chain anchoring of **Merkle roots** and content pointers on **Zircuit testnet**.
 - Optional ciphertext backup to **Walrus** (per-item or bundle CID).
 - Event indexing with **Envio**; UI queries Envio on demand.
@@ -19,11 +19,11 @@
 ## 2) Architecture
 
 ```
-Browser Extension (React/TypeScript, WebExtensions)
-  ├─ Crypto: WebCrypto (Argon2id KDF, AES-256-GCM)
+Next.js Web App (React/TypeScript)
+  ├─ Crypto: WebCrypto (HKDF KDF, AES-256-GCM)
   ├─ Local Vault: IndexedDB + Export/Import (encrypted JSON/CSV)
-  ├─ Optional Backup: Walrus (ciphertext only, decentralized nodes) (ciphertext only, returns CID)
-  ├─ Identity/Wallet: Privy
+  ├─ Optional Backup: Walrus (ciphertext only, returns CID)
+  ├─ Identity/Wallet: Privy (Embedded Wallets)
   └─ RPC: Zircuit testnet
 
 Smart Contracts (Zircuit, Nora-authored)
@@ -48,31 +48,57 @@ Indexing (Envio)
 **Encrypted Record (client-side; never on-chain/indexer):**
 ```ts
 interface VaultItemCipher {
-  v: number;                 // schema version
-  site: string;              // optional plaintext label
-  username: string;          // optional plaintext label
-  cipher: string;            // base64 AES-GCM ciphertext (e.g., password)
-  iv: string;                // 12-byte IV (base64)
-  tag?: string;              // if library separates tag
-  dekWrap: string;           // DEK wrapped with Master Key
-  meta?: Record<string, any> // timestamps, notes
+  v: number;                    // schema version
+  site: string;                 // service name (plaintext)
+  username: string;             // username (plaintext) 
+  cipher: string;               // base64 AES-GCM ciphertext (password encriptado)
+  iv: string;                   // 12-byte IV (base64)
+  encryptionKeyHash: string;    // SHA-256 de la clave derivada (para verificación)
+  meta: {
+    url?: string;
+    notes?: string;
+    category: string;
+    network: string;
+    timestamp: string;
+  }
+}
+
+// On-chain data (no sensitive content):
+interface ZircuitObject {
+  user: string;                 // user address
+  itemIdHash: string;           // keccak256(salt + domain + username)
+  itemCommitment: string;       // keccak256(itemIdHash + walrusCid + encryptionKeyHash)
+  walrusCid: string;             // Walrus CID of the VaultItemCipher
+  encryptionKeyHash: string;    // SHA-256 of encryption key
+  timestamp: string;           // ISO timestamp
 }
 ```
 
 **Keys**
-- **DEK:** per-vault version random 32-byte key.
-- **Master Key (MK):** Argon2id(passphrase); optionally wrapped to Lit PKP/Privy for recovery.
-- **Salts/Nonces:** secure RNG; optionally seeded via Chainlink VRF for demoable randomness.
+- **Encryption Key:** HKDF(signature, salt, info) where signature comes from wallet signing a deterministic message.
+- **Salt:** SHA-256(userAddress + 'vault-encryption-fixed').
+- **Info:** 'sv:hkdf:v1' for domain separation.
+- **IV:** Random 12-byte initialization vector for AES-GCM.
+
+**Key Derivation Flow**
+1. User signs message: "Generate encryption key for ShadowVault session"
+2. Signature is hashed with SHA-256 to create IKM (Input Keying Material)
+3. Salt is derived from user address + domain string
+4. HKDF derives 256-bit encryption key using IKM, salt, and info
+5. Key is used for AES-256-GCM encryption of password
 
 **Commitments (on-chain)**
-- `itemIdHash = keccak256( salt_item || domain || username_hint )`
-- `itemCommitment = keccak256( itemIdHash || cipher_cid || dek_commitment )`
+- `itemIdHash = keccak256( commitmentSalt + domain + username )`
+- `itemCommitment = keccak256( itemIdHash + walrusCid + encryptionKeyHash )`
 - `vaultRoot = merkleRoot( itemCommitment[] )`
+
+**Implementation Details**
+- **Commitment Salt**: 32-byte random salt generated for each item
+- **Walrus Upload**: VaultItemCipher uploaded to Walrus using walrus-http-client or Pinata API
+- **Smart Contract**: ZircuitObject submitted to VaultRegistry contract on Zircuit testnet
 
 **Privacy levels**
 1) Opaque labels; 2) Label-only (hashed username); 3) Local convenience (plaintext labels stay local).
-
----
 
 ---
 
@@ -86,7 +112,7 @@ A key differentiator of ShadowVault is its use of **Zero-Knowledge Proofs (ZKPs)
 
 This ensures that password strength and encryption/decryption correctness are **publicly verifiable on-chain** (via Zircuit) while the underlying secrets remain completely private.
 
-
+---
 
 ## 4) Smart Contracts (Nora)
 
