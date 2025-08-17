@@ -1,0 +1,49 @@
+{
+  "name": "shadowvault-extension",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ShadowVault Chrome Extension - Secure Password Manager with Web3 Integration",
+  "main": "public/background.js",
+  "dependencies": {
+    "@privy-io/react-auth": "^1.82.4",
+    "@privy-io/wagmi": "^0.2.12",
+    "@tanstack/react-query": "^5.85.3",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.454.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "viem": "^2.21.1",
+    "wagmi": "^2.12.2",
+    "zod": "3.25.67"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.254"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "INLINE_RUNTIME_CHUNK=false react-scripts build && npm run post-build",
+    "post-build": "cp public/manifest.json build/ && cp public/background.js build/ && cp public/content.js build/",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "package": "cd build && zip -r ../shadowvault-extension.zip ."
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
