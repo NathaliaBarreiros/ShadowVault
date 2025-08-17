@@ -24,6 +24,21 @@ export interface VaultEntry {
     storageEpoch?: number
     encryptionKey?: string
     uploadedAt: string
+    // Smart contract parameters
+    blockchainTxHash?: string
+    contractAddress?: string
+    networkChainId?: number
+    storedHash?: string
+    walrusCid?: string
+    // VaultItemCipher data (for Walrus button functionality)
+    vaultItemCipher?: {
+      v: number
+      site: string
+      username: string
+      cipher: string
+      iv: string
+      meta: any
+    }
   }
 }
 
