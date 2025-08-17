@@ -1,5 +1,7 @@
 # ShadowVault — Privacy-First Password Manager (Zircuit + Walrus + Privy + Nora)
 
+## https://shadowvault.vercel.app
+
 ## 1) Project Overview
 
 **One-liner:** A Next.js web application that stores credentials as encrypted data, anchors tamper-proof commitments on-chain, and proves correctness with zero-knowledge proofs — without ever exposing plaintext secrets.
