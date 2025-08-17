@@ -74,6 +74,20 @@ interface VaultItemCipher {
 
 ---
 
+---
+
+## 3.1 Zero-Knowledge Proofs in ShadowVault
+
+A key differentiator of ShadowVault is its use of **Zero-Knowledge Proofs (ZKPs)** to prove correct cryptographic operations without revealing secrets.
+
+- **Password generation policies:** Users can prove that a generated or chosen password meets complexity rules (e.g., ≥12 chars, ≥3 character classes) without exposing the password itself.
+- **Encryption correctness:** The extension can prove that a ciphertext corresponds to a committed plaintext under a given key, without revealing the plaintext or key.
+- **Decryption integrity:** Similarly, users can prove that decryption of a ciphertext yields a valid result consistent with prior commitments, without revealing the actual decrypted value.
+
+This ensures that password strength and encryption/decryption correctness are **publicly verifiable on-chain** (via Zircuit) while the underlying secrets remain completely private.
+
+
+
 ## 4) Smart Contracts (Nora)
 
 **Interface (illustrative):**
