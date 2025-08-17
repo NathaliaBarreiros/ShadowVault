@@ -1,0 +1,6 @@
+[package]
+name = "password_strength"
+type = "bin"
+authors = [""]
+
+[dependencies]
