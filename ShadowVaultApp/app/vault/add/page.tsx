@@ -63,6 +63,8 @@ export default function AddPasswordPage() {
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([])
   const [zircuitObject, setZircuitObject] = useState<{ storedHash: string; walrusCid: string } | null>(null)
   const [isSubmittingToContract, setIsSubmittingToContract] = useState(false)
+  const [encryptionKey, setEncryptionKey] = useState<string>('')
+  const [vaultItemCipher, setVaultItemCipher] = useState<any>(null)
 
   // Wagmi v2 hooks for contract interaction
   const { writeContract, data: contractTxHash, isPending: isContractWritePending, error: contractError } = useWriteContract()
@@ -109,16 +111,62 @@ export default function AddPasswordPage() {
 
   // Handle contract transaction completion
   useEffect(() => {
-    if (isContractTxSuccess && contractTxHash) {
+    if (isContractTxSuccess && contractTxHash && zircuitObject) {
       console.log('[AddPassword] ✅ Contract transaction confirmed!')
       console.log('[AddPassword] 🔗 Transaction Hash:', contractTxHash)
       console.log('[AddPassword] 🌐 View on Explorer:', `https://explorer.garfield-testnet.zircuit.com/tx/${contractTxHash}`)
       setIsSubmittingToContract(false)
       
-      // Update localStorage entry with blockchain transaction info
-      // This could be enhanced to update the saved entry with the transaction hash
+      // Step 5: Now save to localStorage with blockchain transaction hash
+      console.log('[AddPassword] 💾 Saving to localStorage with blockchain confirmation...')
+      
+      // Get the current encryption key and VaultItemCipher
+      const walletAddress = getWalletAddress()
+      if (walletAddress && formData.password && vaultItemCipher) {
+        try {
+          const vaultEntry: Omit<VaultEntry, 'id' | 'createdAt' | 'updatedAt'> = {
+            name: formData.name,
+            username: formData.username,
+            password: formData.password,
+            url: formData.url,
+            network: formData.network as VaultEntry['network'],
+            aiStrength: passwordStrength,
+            lastAccessed: 'Just created',
+            category: formData.category as VaultEntry['category'],
+            isFavorite: false,
+            needsUpdate: false,
+            walrusMetadata: {
+              blobId: zircuitObject.walrusCid,
+              ipfsCid: zircuitObject.walrusCid,
+              storageEpoch: Math.floor(Date.now() / 1000),
+              encryptionKey: encryptionKey, // Encryption key from signature
+              uploadedAt: new Date().toISOString(),
+              blockchainTxHash: contractTxHash,
+              contractAddress: ShadowVaultV2Address,
+              networkChainId: 48898,
+              // Store the smart contract parameters
+              storedHash: zircuitObject.storedHash,
+              walrusCid: zircuitObject.walrusCid,
+              // Store VaultItemCipher data for Walrus button functionality
+              vaultItemCipher: vaultItemCipher
+            }
+          }
+          
+          const savedEntry = VaultStorageService.addEntry(vaultEntry)
+          console.log('[AddPassword] ✅ Saved to localStorage with blockchain confirmation:', savedEntry.id)
+          console.log('[AddPassword] 🔗 Entry includes transaction hash:', contractTxHash)
+          
+          // Navigate to vault after successful completion
+          setTimeout(() => {
+            router.push("/vault")
+          }, 2000) // Give user time to see the success message
+          
+        } catch (saveError) {
+          console.error('[AddPassword] ❌ Failed to save entry with blockchain confirmation:', saveError)
+        }
+      }
     }
-  }, [isContractTxSuccess, contractTxHash])
+  }, [isContractTxSuccess, contractTxHash, zircuitObject, vaultItemCipher, encryptionKey, formData, passwordStrength, router])
 
   // Handle contract write errors
   useEffect(() => {
@@ -271,6 +319,9 @@ export default function AddPasswordPage() {
       console.log('[AddPassword] Encryption key derived (first 8 bytes):', Array.from(rawKey.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(''))
       console.log('[AddPassword] Encryption key (base64):', base64Key)
       
+      // Store encryption key for later use in localStorage save
+      setEncryptionKey(base64Key)
+      
       // Step 2: Create plaintext payload to encrypt
       const payload = {
         site: formData.name,
@@ -289,6 +340,9 @@ export default function AddPasswordPage() {
       console.log('[AddPassword] VaultItemCipher created successfully!')
       console.log('[AddPassword] Encrypted password length:', vaultItem.cipher.length)
       console.log('[AddPassword] IV length:', vaultItem.iv.length)
+      
+      // Store VaultItemCipher for later localStorage save
+      setVaultItemCipher(vaultItem)
       
       // Step 4: Create ZircuitObject (for on-chain submission)
       // Step 4.1: Upload VaultItemCipher to Walrus to get blob ID
@@ -391,30 +445,8 @@ export default function AddPasswordPage() {
       console.log('[AddPassword] 🌐 Blob will be accessible via:', `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${zircuitObj.walrusCid}`)
       console.log('[AddPassword] ⚡ Next: Submit ZircuitObject to blockchain for indexing')
       
-      // Step 5: Save to localStorage for immediate use
-      console.log('[AddPassword] 💾 Saving to localStorage...')
-      const vaultEntry: Omit<VaultEntry, 'id' | 'createdAt' | 'updatedAt'> = {
-        name: formData.name,
-        username: formData.username,
-        password: formData.password,
-        url: formData.url,
-        network: formData.network as VaultEntry['network'],
-        aiStrength: passwordStrength,
-        lastAccessed: 'Just created',
-        category: formData.category as VaultEntry['category'],
-        isFavorite: false,
-        needsUpdate: false,
-        walrusMetadata: {
-          blobId: walrusBlobId,
-          ipfsCid: zircuitObj.walrusCid,
-          storageEpoch: Math.floor(Date.now() / 1000),
-          encryptionKey: base64Key,
-          uploadedAt: new Date().toISOString()
-        }
-      }
-      
-      const savedEntry = VaultStorageService.addEntry(vaultEntry)
-      console.log('[AddPassword] ✅ Saved to localStorage with ID:', savedEntry.id)
+      // Step 5: Will be done after contract confirmation (moved to useEffect)
+      console.log('[AddPassword] ⏭️ Skipping localStorage save - will complete after blockchain confirmation')
       
       // Step 6: Submit ZircuitObject to smart contract
       console.log('[AddPassword] 🔗 Submitting to ShadowVaultV2 smart contract...')
@@ -461,16 +493,17 @@ export default function AddPasswordPage() {
       // Simulate remaining steps for now
       await new Promise((resolve) => setTimeout(resolve, 1000))
       
-      console.log('[AddPassword] 🎉 Password saved successfully!')
-      console.log('[AddPassword] 📱 Available immediately in vault')
-      console.log('[AddPassword] 🔗 Walrus integration ready for blockchain submission')
+      console.log('[AddPassword] 🎉 Walrus upload and contract submission initiated!')
+      console.log('[AddPassword] ⏳ Waiting for blockchain confirmation to complete localStorage save...')
+      console.log('[AddPassword] 🔗 Monitor wallet for transaction confirmation')
       
     } catch (error) {
       console.error('[AddPassword] Error during save:', error)
+      setIsSaving(false)
       // TODO: Show error to user
     } finally {
       setIsSaving(false)
-      router.push("/vault")
+      // Note: Navigation will happen after blockchain confirmation in useEffect
     }
   }
 

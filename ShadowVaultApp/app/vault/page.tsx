@@ -224,10 +224,48 @@ export default function VaultPage() {
     // Log Walrus metadata if available
     if (password.walrusMetadata) {
       console.log('🗄️ Walrus Metadata:', password.walrusMetadata)
+      
+      // Log VaultItemCipher data (for Walrus button functionality)
+      if (password.walrusMetadata.vaultItemCipher) {
+        console.group('🔐 VaultItemCipher Data (Encrypted Password Data)')
+        console.log('📦 VaultItemCipher Object:', password.walrusMetadata.vaultItemCipher)
+        console.log('🏢 Site:', password.walrusMetadata.vaultItemCipher.site)
+        console.log('👤 Username:', password.walrusMetadata.vaultItemCipher.username)
+        console.log('🔒 Encrypted Cipher Length:', password.walrusMetadata.vaultItemCipher.cipher?.length || 'N/A')
+        console.log('🔑 IV Length:', password.walrusMetadata.vaultItemCipher.iv?.length || 'N/A')
+        console.log('📋 Metadata:', password.walrusMetadata.vaultItemCipher.meta)
+        console.log('📝 Version:', password.walrusMetadata.vaultItemCipher.v)
+        console.groupEnd()
+      } else {
+        console.log('⚠️ No VaultItemCipher data found')
+      }
+      
+      // Log Smart Contract parameters (ZircuitObject data)
+      if (password.walrusMetadata.storedHash && password.walrusMetadata.walrusCid) {
+        console.group('⛓️ Smart Contract Parameters (ZircuitObject)')
+        console.log('🔗 Contract Address:', password.walrusMetadata.contractAddress)
+        console.log('🌐 Network Chain ID:', password.walrusMetadata.networkChainId)
+        console.log('🏷️ Stored Hash:', password.walrusMetadata.storedHash)
+        console.log('🐋 Walrus CID:', password.walrusMetadata.walrusCid)
+        console.log('📋 Blockchain Transaction Hash:', password.walrusMetadata.blockchainTxHash)
+        console.log('🔗 Explorer URL:', password.walrusMetadata.blockchainTxHash ? 
+          `https://explorer.garfield-testnet.zircuit.com/tx/${password.walrusMetadata.blockchainTxHash}` : 
+          'Not Available')
+        console.groupEnd()
+      } else {
+        console.log('⚠️ No smart contract parameters found')
+      }
+      
+      // Log additional Walrus storage info
+      console.group('🗄️ Walrus Storage Details')
       console.log('📋 Blob ID:', password.walrusMetadata.blobId)
       console.log('🔗 IPFS CID:', password.walrusMetadata.ipfsCid)
       console.log('⏰ Uploaded At:', password.walrusMetadata.uploadedAt)
+      console.log('⏰ Storage Epoch:', password.walrusMetadata.storageEpoch)
       console.log('🔐 Encryption Key:', password.walrusMetadata.encryptionKey ? 'Present' : 'Not Available')
+      console.log('🌐 Direct Walrus URL:', `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${password.walrusMetadata.blobId}`)
+      console.groupEnd()
+      
     } else {
       console.log('⚠️ No Walrus metadata found - entry may not be uploaded to Walrus yet')
       
@@ -260,7 +298,7 @@ export default function VaultPage() {
     
     toast({
       title: "Walrus Info Logged",
-      description: `Check console for ${password.name} details`
+      description: `Check console for ${password.name} VaultItemCipher & ZircuitObject details`
     })
   }
 
