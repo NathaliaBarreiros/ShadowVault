@@ -1,18 +1,18 @@
-# ShadowVault — Privacy-First Password Manager (Zircuit + Envio + Nora)
+# ShadowVault — Privacy-First Password Manager (Zircuit + Walrus + Privy + Nora)
 
 ## 1) Project Overview
 
-**One-liner:** A Next.js web application that stores credentials as encrypted data, anchors tamper-proof commitments on-chain, and serves verifiable, queryable state via an indexer — without ever exposing plaintext secrets.
+**One-liner:** A Next.js web application that stores credentials as encrypted data, anchors tamper-proof commitments on-chain, and proves correctness with zero-knowledge proofs — without ever exposing plaintext secrets.
 
-**Why it matters:** Traditional managers require trust in centralized services. ShadowVault proves integrity and recency of your encrypted vault using **on-chain commitments** and **Envio-indexed events**, keeping secrets private end-to-end.
+**Why it matters:** Traditional managers require trust in centralized services. ShadowVault proves integrity and recency of your encrypted vault using **on-chain commitments**, **Noir-generated ZK proofs**, and decentralized storage via **Walrus**, keeping secrets private end-to-end.
 
 **MVP Scope (hackathon):**
 - Local encryption (HKDF + AES-256-GCM).
-- On-chain anchoring of **Merkle roots** and content pointers on **Zircuit testnet**.
+- Zero-knowledge proofs (Noir circuits) for encryption correctness + password policy compliance.
+- On-chain anchoring of **Merkle roots** and Walrus CIDs on **Zircuit testnet**.
 - Optional ciphertext backup to **Walrus** (per-item or bundle CID).
-- Event indexing with **Envio**; UI queries Envio on demand.
-- Contracts authored & deployed using **Nora Agent**.
-- No plaintext usernames/passwords on-chain or in the indexer.
+- Contracts authored, tested, and deployed entirely using **Nora Agent**.
+- No plaintext usernames/passwords ever leave the device.
 
 ---
 
@@ -20,9 +20,9 @@
 
 ```
 Next.js Web App (React/TypeScript)
-  ├─ Crypto: WebCrypto (HKDF KDF, AES-256-GCM)
+  ├─ Crypto: WebCrypto (HKDF KDF, AES-256-GCM) + Noir ZKPs
   ├─ Local Vault: IndexedDB + Export/Import (encrypted JSON/CSV)
-  ├─ Optional Backup: Walrus (ciphertext only, returns CID)
+  ├─ Backup: Walrus (ciphertext + ZK proofs only, returns CID)
   ├─ Identity/Wallet: Privy (Embedded Wallets)
   └─ RPC: Zircuit testnet
 
@@ -30,29 +30,25 @@ Smart Contracts (Zircuit, Nora-authored)
   ├─ VaultRegistry (events only; minimal storage)
   ├─ Events: VaultVersionAnchored, VaultItemCommitted, VaultItemRevoked
   └─ latestVersion(owner) view
-
-Indexing (Envio)
-  ├─ Ingests contract events
-  ├─ Derives queryable tables (users, versions, items)
-  └─ HTTP/GraphQL API for UI + auditors (no secrets)
 ```
 
 **Key Patterns**
 - **Commit–Reveal (without reveal):** Only salted hashes/Merkle roots + CIDs on-chain.
-- **Index-then-verify:** Query Envio → fetch ciphertext (Walrus) → recompute + compare local root.
+- **Verify loop:** Fetch ciphertext + proofs from Walrus → recompute Merkle root + validate ZKP → compare to root anchored on Zircuit.
 
 ---
 
 ## 3) Data & Crypto
 
-**Encrypted Record (client-side; never on-chain/indexer):**
+**Encrypted Record (client-side; never on-chain):**
 ```ts
 interface VaultItemCipher {
   v: number;                    // schema version
-  site: string;                 // service name (plaintext)
-  username: string;             // username (plaintext) 
-  cipher: string;               // base64 AES-GCM ciphertext (password encriptado)
+  site: string;                 // service name (plaintext optional)
+  username: string;             // username (plaintext optional) 
+  cipher: string;               // base64 AES-GCM ciphertext of password
   iv: string;                   // 12-byte IV (base64)
+  proof: string;                 // Noir ZKP proving encryption correctness + policy
   meta: {
     url?: string;
     notes?: string;
@@ -64,47 +60,36 @@ interface VaultItemCipher {
 
 // On-chain data (no sensitive content):
 interface ZircuitObject {
-  storedHash: string;           // SHA-256 hash of the password
-  walrusCid: string;           // Walrus CID of the VaultItemCipher
+  owner: string;                 // user address
+  itemIdHash: string;            // keccak256(salt + domain + usernameHint)
+  itemCommitment: string;        // keccak256(itemIdHash + walrusCid + encryptionKeyHash)
+  walrusCid: string;             // Walrus CID of VaultItemCipher bundle
+  timestamp: string;
 }
 ```
 
 **Keys**
-- **Encryption Key:** HKDF(signature, salt, info) where signature comes from wallet signing a deterministic message.
-- **Salt:** SHA-256(userAddress + 'vault-encryption-fixed').
-- **Info:** 'sv:hkdf:v1' for domain separation.
-- **IV:** Random 12-byte initialization vector for AES-GCM.
-
-**Key Derivation Flow**
-1. User signs message: "Generate encryption key for ShadowVault session"
-2. Signature is hashed with SHA-256 to create IKM (Input Keying Material)
-3. Salt is derived from user address + domain string
-4. HKDF derives 256-bit encryption key using IKM, salt, and info
-5. Key is used for AES-256-GCM encryption of password
+- **Encryption Key:** Derived via HKDF(signature, salt, info). Signature comes from wallet signing a deterministic message.  
+- **Salt:** SHA-256(userAddress + “vault-encryption-fixed”).  
+- **Info:** “sv:hkdf:v1” for domain separation.  
+- **IV:** Random 12-byte initialization vector.  
 
 **Commitments (on-chain)**
-- `storedHash = SHA256( password )`
-- `walrusCid = Walrus blob ID`
-
-**Implementation Details**
-- **Password Hash**: SHA-256 hash of the password for verification
-- **Walrus Upload**: VaultItemCipher uploaded to Walrus using walrus-http-client
-- **Smart Contract**: ZircuitObject submitted to VaultRegistry contract on Zircuit testnet
-
-**Privacy levels**
-1) Opaque labels; 2) Label-only (hashed username); 3) Local convenience (plaintext labels stay local).
+- `itemIdHash = keccak256( salt + domain + usernameHint )`  
+- `itemCommitment = keccak256( itemIdHash + walrusCid + encryptionKeyHash )`  
+- `vaultRoot = merkleRoot( itemCommitments[] )`  
 
 ---
 
 ## 3.1 Zero-Knowledge Proofs in ShadowVault
 
-A key differentiator of ShadowVault is its use of **Zero-Knowledge Proofs (ZKPs)** to prove correct cryptographic operations without revealing secrets.
+ShadowVault uses **Noir circuits** to generate proofs of correct cryptographic operations without revealing secrets:  
 
-- **Password generation policies:** Users can prove that a generated or chosen password meets complexity rules (e.g., ≥12 chars, ≥3 character classes) without exposing the password itself.
-- **Encryption correctness:** The extension can prove that a ciphertext corresponds to a committed plaintext under a given key, without revealing the plaintext or key.
-- **Decryption integrity:** Similarly, users can prove that decryption of a ciphertext yields a valid result consistent with prior commitments, without revealing the actual decrypted value.
+- **Password strength:** Prove that a password meets policy (e.g., ≥12 chars, ≥3 character classes).  
+- **Encryption correctness:** Prove ciphertext corresponds to committed plaintext under the derived DEK.  
+- **Decryption integrity:** Prove decryption of a ciphertext yields a valid committed result.  
 
-This ensures that password strength and encryption/decryption correctness are **publicly verifiable on-chain** (via Zircuit) while the underlying secrets remain completely private.
+Proof objects are stored with ciphertext in Walrus and referenced in commitments. Verification checks both Merkle root match and ZKP validity against the on-chain anchor.
 
 ---
 
@@ -121,142 +106,111 @@ interface IShadowVaultRegistry {
 ```
 
 **Storage philosophy**
-- Keep state tiny: `latestVersion[owner]` mapping only.
-- Everything else = **events** (perfect for **Envio**).
+- Minimal on-chain storage: only `latestVersion[owner]`.  
+- All other state = emitted events, optimized for Zircuit’s event logs.  
+- Authorship/deployment handled fully via **Nora Agent**, which produced Solidity from specs, scaffolded unit tests, and deployed contracts.  
+- Nora also supported front-end encryption scaffolding and key-handling utilities, accelerating build time.  
 
 **Network**
-- **Zircuit testnet** only (no cross-chain in MVP).
+- **Zircuit testnet** only (zk-friendly L2, fast finality).  
 
 ---
 
-## 5) Envio Indexing
-
-**Entities**
-- **User**: `{ address }`
-- **VaultItem**: `{ owner, storedHash, walrusCid, timestamp }`
-
-**Queries (conceptual)**
-- User items: `/vaultItems?owner=0x..`
-- Find item: `/vaultItems?storedHash=0x..`
-
-> Actual endpoints depend on your Envio processor configuration.
-
-### Role and Value Proposition
-
-Envio serves as a high-performance indexing layer that reads events from the `ShadowVault` smart contract and transforms them into a queryable GraphQL API. Its role is critical for both performance and security:
-
--   **Performance:** It provides a fast, off-chain API for fetching lists of vault entries. This avoids costly and slow direct contract calls (e.g., iterating through arrays in storage), leading to a snappy user experience.
--   **Cost-Effectiveness:** Reading data from the Envio API is free for the end-user, whereas querying data directly from the blockchain can incur gas fees or RPC provider costs.
--   **Preservation of Privacy:** The indexer is configured to only handle non-sensitive metadata emitted in events. No encrypted passwords or private user data ever pass through or are stored by Envio, aligning with the project's privacy-first principles.
-
-
----
-
-## 6) End-to-End Flows
+## 5) End-to-End Flows
 
 **Add / Update**
-1) User edits/creates item → encrypt locally.  
-2) Compute `itemIdHash`, `itemCommitment`.  
-3) Push ciphertext(s) to **Walrus decentralized nodes** → get CID(s).  
-4) Anchor via contract → emits `VaultVersionAnchored` (+ optional per-item events).  
-5) **Envio** indexes; UI refreshes by querying Envio.
+1. User edits/creates item → encrypt locally with DEK.  
+2. Generate Noir ZKP (strength + correctness).  
+3. Push ciphertext + proof bundle to **Walrus** → get CID.  
+4. Compute commitments and vaultRoot.  
+5. Anchor via contract → emits `VaultVersionAnchored` (+ optional per-item events).  
 
-**Verify (auditor/self)**
-1) Query Envio → get `vaultRoot` + `bundleCID`.  
-2) Fetch bundle from Walrus → recompute root.  
-3) Compare roots; check monotonic version timestamps.
+**Verify (auditor/self)**  
+1. Fetch vaultRoot + CID from contract event.  
+2. Fetch bundle from Walrus.  
+3. Recompute Merkle root + validate ZKP locally.  
+4. Compare against anchored root.  
 
 **Export/Import**
 - Export encrypted JSON/CSV (no keys).  
-- Import → validate → re-derive commitments → anchor as new version.
+- Import → re-derive commitments, validate proofs, anchor as new version.  
 
-**Recovery (optional demo)**
-- Wrap MK with Lit PKP or Privy-gated capsule; unwrap locally to restore DEK.
-
----
-
-## 7) Security & Threat Model (MVP)
-
-**Protects against**
-- Server/indexer compromise (no plaintext off-device).  
-- On-chain scraping (only salted hashes + CIDs).  
-- Rollback (monotonic version anchors).
-
-**Out of scope (MVP)**
-- Device compromise, advanced phishing/side-channels, formal proofs.
+**Recovery (optional demo)**  
+- Wrap MK with Lit PKP or Privy-gated capsule; unwrap locally to restore DEK.  
 
 ---
 
-## 8) Getting Started
+## 6) Security & Threat Model (MVP)
 
-### 8.1 Prerequisites
-- Node.js 18+, npm/yarn
-- Hardhat or Foundry (for local testing)
-- **Nora Agent** access (author/deploy contracts)
-- **Envio** account & processor config
-- **Privy** app (client SDK)
-- Walrus client (e.g., `walrus-http-client` or Pinata key)
-- Git
+**Protects against**  
+- Centralized server compromise (Walrus is decentralized).  
+- On-chain scraping (only salted hashes + commitments).  
+- Rollback attacks (monotonic version anchors + timestamps).  
 
-### 8.2 Environment
-Create `.env` with:
-```
+**Out of scope (MVP)**  
+- Device compromise or phishing.  
+- Multi-user vaults.  
+- Formal audits (post-hackathon).  
+
+---
+
+## 7) Getting Started
+
+### Prerequisites
+- Node.js 18+, npm/yarn  
+- Hardhat or Foundry (for local testing)  
+- **Nora Agent** account (for contract authoring/deployment)  
+- **Privy** app (embedded wallet)  
+- Walrus client (`walrus-http-client`)  
+- Git  
+
+### Environment
+```bash
 ZIRCUIT_RPC_URL=...
 WALLET_PRIVATE_KEY=...
 PRIVY_APP_ID=...
-Walrus_API_URL=...           # or WALRUS_KEY=...
-ENVIO_API_URL=...          # your Envio query endpoint
+WALRUS_API_URL=...
 ```
-*(Never commit secrets.)*
 
-### 8.3 Local Dev
+### Local Dev
 ```bash
-# install deps
 npm install
-
-# compile & test contracts (Hardhat or Foundry)
 npx hardhat compile
 npx hardhat test
-
-# run extension dev server (example)
-npm run dev:ext
+npm run dev
 ```
 
-### 8.4 Deploy (Testnet)
-- Author/spec contracts in Nora → generate Solidity + tests.  
-- Deploy with Nora’s workflow or with Hardhat scripts to **Zircuit testnet**.  
-- Publish ABIs for the extension & Envio processor mapping.
+### Deploy (Testnet)
+- Author contracts in natural language → use **Nora** to generate Solidity + tests.  
+- Deploy via Nora workflow or Hardhat scripts.  
+- Publish ABIs for frontend.  
 
-### 8.5 Configure Envio
-- Map `VaultVersionAnchored`, `VaultItemCommitted`, `VaultItemRevoked` → entities.  
-- Deploy processor; note `ENVIO_API_URL` for the UI.
-
-### 8.6 Demo Script
-- Create 3 mock credentials → encrypt & bundle to Walrus.  
-- Anchor version; observe Nora tx on Zircuit.  
-- Query Envio for latest version; fetch bundle; recompute root locally.  
+### Demo Script
+- Create 3 mock credentials → encrypt + bundle to Walrus.  
+- Anchor version → observe Nora tx on Zircuit.  
+- Fetch bundle → recompute Merkle root + validate ZKP.  
 - Export → wipe local → import → re-anchor.  
-- Show that no plaintext exists on-chain or in Envio.
+- Confirm no plaintext leaves device.  
 
 ---
 
-## 9) Roadmap (post-hackathon)
-- Optional **Noir** circuits for password strength proofs or set-membership (breached lists).  
+## 8) Roadmap (post-hackathon)
+
+- Multi-device recovery (threshold cryptography).  
 - Team/shared vaults with per-item re-encryption.  
-- Threshold recovery; hardware key support.  
-- WALRUS or other decentralized storage backends.  
-- Formal audits; mobile builds.
+- Noir circuits for breach-set membership proofs.  
+- Hardware key support.  
+- Formal audits + mobile builds.  
 
 ---
 
-## 10) License
-MIT — see `LICENSE`.
+## 9) License
+MIT — see `LICENSE`.  
 
 ---
 
-## 11) Acknowledgements
-- **Nora Agent** (contracts from spec)  
-- **Envio** (indexing & query)  
-- **Zircuit** (L2 for fast, cheap verification)  
-- **Privy** (identity/wallet)  
-- **Walrus** (ciphertext backups)
+## 10) Acknowledgements
+- **Nora Agent** (authored/deployed contracts + front-end encryption scaffolding)  
+- **Zircuit** (L2 anchoring)  
+- **Walrus** (decentralized ciphertext + proof storage)  
+- **Privy** (wallet/identity)  
