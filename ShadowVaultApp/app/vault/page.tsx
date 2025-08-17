@@ -43,9 +43,6 @@ interface PasswordEntry {
 
 export default function VaultPage() {
   const [searchQuery, setSearchQuery] = useState("")
-  const { user } = usePrivy();
-  const { data, isLoading, error } = useVaultEntries(user?.wallet?.address);
-
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({})
   const [copyingId, setCopyingId] = useState<string | null>(null)
 
