@@ -48,7 +48,7 @@ interface NetworkOption {
 
 export default function AddPasswordPage() {
   const router = useRouter()
-  const { address } = useAccount()
+  const { address, isConnected } = useAccount()
   
   // Privy hooks
   const { signMessageAsync } = useSignMessage()
@@ -411,6 +411,7 @@ export default function AddPasswordPage() {
     console.log('[AddPassword] 📋 Privy ready:', ready)
     console.log('[AddPassword] 📋 Privy authenticated:', authenticated)
     console.log('[AddPassword] 📋 Wagmi address:', address)
+    console.log('[AddPassword] 📋 Wagmi connected:', isConnected)
     console.log('[AddPassword] 📋 Privy wallets:', wallets?.length || 0)
     console.log('[AddPassword] 📋 Privy user:', !!user)
     
@@ -433,7 +434,28 @@ export default function AddPasswordPage() {
       const message = `Generate encryption key for ShadowVault session`
       console.log('[AddPassword] Message to sign:', message)
       
-      const signature = await signMessageAsync({ message })
+      let signature: string
+      
+      // Use appropriate signing method based on wallet type
+      if (address && isConnected) {
+        // External wallet connected via Wagmi
+        console.log('[AddPassword] Using Wagmi signing for external wallet')
+        signature = await signMessageAsync({ message })
+      } else if (wallets && wallets.length > 0) {
+        // Privy embedded wallet
+        console.log('[AddPassword] Using Privy embedded wallet signing')
+        const embeddedWallet = wallets.find(wallet => wallet.connectorType === 'embedded') || wallets[0]
+        
+        if (!embeddedWallet) {
+          throw new Error('No embedded wallet available for signing')
+        }
+        
+        // Use Privy's embedded wallet signMessage method
+        signature = await embeddedWallet.signMessage(message)
+      } else {
+        throw new Error('No wallet available for signing. Please connect a wallet.')
+      }
+      
       console.log('[AddPassword] Signature received:', signature)
       
       const { rawKey, base64Key } = await deriveEncryptionKeyFromSignature(signature, walletAddress)
