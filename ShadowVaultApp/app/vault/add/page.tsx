@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
-import { useAccount, useSignMessage } from "wagmi"
+import { useState, useEffect } from "react"
+import { useAccount, useSignMessage, useWriteContract, useWaitForTransactionReceipt } from "wagmi"
+import { usePrivy, useWallets } from "@privy-io/react-auth"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -28,6 +29,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { deriveEncryptionKeyFromSignature, createVaultItemCipher, createZircuitObject } from "@/lib/encryption"
 import { VaultStorageService, type VaultEntry } from "@/lib/vault-storage"
+import { ShadowVaultV2Address, ShadowVaultV2ABI } from "@/lib/contracts/ShadowVaultV2"
 
 interface NetworkOption {
   id: string
@@ -41,6 +43,8 @@ export default function AddPasswordPage() {
   const router = useRouter()
   const { address } = useAccount()
   const { signMessageAsync } = useSignMessage()
+  const { ready, authenticated, user } = usePrivy()
+  const { wallets } = useWallets()
   const [formData, setFormData] = useState({
     name: "",
     username: "",
@@ -57,6 +61,72 @@ export default function AddPasswordPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([])
+  const [zircuitObject, setZircuitObject] = useState<{ storedHash: string; walrusCid: string } | null>(null)
+  const [isSubmittingToContract, setIsSubmittingToContract] = useState(false)
+
+  // Wagmi v2 hooks for contract interaction
+  const { writeContract, data: contractTxHash, isPending: isContractWritePending, error: contractError } = useWriteContract()
+
+  const { isLoading: isContractTxPending, isSuccess: isContractTxSuccess } = useWaitForTransactionReceipt({
+    hash: contractTxHash,
+  })
+
+  // Get wallet address from multiple sources
+  const getWalletAddress = () => {
+    // Try Wagmi first
+    if (address) {
+      console.log('[AddPassword] Using Wagmi address:', address)
+      return address
+    }
+    
+    // Try Privy embedded wallet
+    if (wallets && wallets.length > 0) {
+      const connectedWallet = wallets.find(wallet => wallet.connectorType === 'embedded')
+      if (connectedWallet?.address) {
+        console.log('[AddPassword] Using Privy embedded wallet address:', connectedWallet.address)
+        return connectedWallet.address
+      }
+      
+      // Use first available wallet
+      if (wallets[0]?.address) {
+        console.log('[AddPassword] Using first available wallet address:', wallets[0].address)
+        return wallets[0].address
+      }
+    }
+    
+    // Try Privy user wallet
+    if (user?.wallet?.address) {
+      console.log('[AddPassword] Using Privy user wallet address:', user.wallet.address)
+      return user.wallet.address
+    }
+    
+    console.error('[AddPassword] No wallet address found from any source')
+    return null
+  }
+
+  // Get current wallet address for validation
+  const currentWalletAddress = getWalletAddress()
+
+  // Handle contract transaction completion
+  useEffect(() => {
+    if (isContractTxSuccess && contractTxHash) {
+      console.log('[AddPassword] ✅ Contract transaction confirmed!')
+      console.log('[AddPassword] 🔗 Transaction Hash:', contractTxHash)
+      console.log('[AddPassword] 🌐 View on Explorer:', `https://explorer.garfield-testnet.zircuit.com/tx/${contractTxHash}`)
+      setIsSubmittingToContract(false)
+      
+      // Update localStorage entry with blockchain transaction info
+      // This could be enhanced to update the saved entry with the transaction hash
+    }
+  }, [isContractTxSuccess, contractTxHash])
+
+  // Handle contract write errors
+  useEffect(() => {
+    if (contractError) {
+      console.error('[AddPassword] ❌ Contract write error:', contractError)
+      setIsSubmittingToContract(false)
+    }
+  }, [contractError])
 
   const networks: NetworkOption[] = [
     { id: "zircuit", name: "Zircuit", speed: "Fastest", cost: "Low", color: "bg-green-100 text-green-800" },
@@ -168,10 +238,22 @@ export default function AddPasswordPage() {
   }
 
   const handleSave = async () => {
-    if (!address) {
-      console.error('No wallet address available')
+    console.log('[AddPassword] 🔍 Checking wallet connection...')
+    console.log('[AddPassword] 📋 Privy ready:', ready)
+    console.log('[AddPassword] 📋 Privy authenticated:', authenticated)
+    console.log('[AddPassword] 📋 Wagmi address:', address)
+    console.log('[AddPassword] 📋 Privy wallets:', wallets?.length || 0)
+    console.log('[AddPassword] 📋 Privy user:', !!user)
+    
+    const walletAddress = getWalletAddress()
+    if (!walletAddress) {
+      console.error('[AddPassword] ❌ No wallet address available')
+      console.error('[AddPassword] 💡 Please ensure you are properly connected to a wallet')
+      alert('Please connect your wallet to save passwords to the blockchain.')
       return
     }
+    
+    console.log('[AddPassword] ✅ Using wallet address:', walletAddress)
     
     setIsSaving(true)
 
@@ -185,7 +267,7 @@ export default function AddPasswordPage() {
       const signature = await signMessageAsync({ message })
       console.log('[AddPassword] Signature received:', signature)
       
-      const { rawKey, base64Key } = await deriveEncryptionKeyFromSignature(signature, address)
+      const { rawKey, base64Key } = await deriveEncryptionKeyFromSignature(signature, walletAddress)
       console.log('[AddPassword] Encryption key derived (first 8 bytes):', Array.from(rawKey.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(''))
       console.log('[AddPassword] Encryption key (base64):', base64Key)
       
@@ -293,17 +375,20 @@ export default function AddPasswordPage() {
       }
       
       console.log('[AddPassword] 🏗️ Creating ZircuitObject with Walrus blob ID:', walrusBlobId)
-      const zircuitObject = await createZircuitObject(formData.password, walrusBlobId)
+      const zircuitObj = await createZircuitObject(formData.password, walrusBlobId)
       console.log('[AddPassword] ✅ ZircuitObject created successfully!')
       console.log('[AddPassword] 🚀 Ready for Zircuit blockchain submission:', {
-        storedHash: zircuitObject.storedHash.slice(0, 16) + '...',
-        walrusCid: zircuitObject.walrusCid
+        storedHash: zircuitObj.storedHash.slice(0, 16) + '...',
+        walrusCid: zircuitObj.walrusCid
       })
+      
+      // Set the ZircuitObject for contract interaction
+      setZircuitObject(zircuitObj)
       
       console.log('[AddPassword] 📊 Storage Summary:')
       console.log('[AddPassword] 🔐 Encrypted password stored on Walrus decentralized network')
-      console.log('[AddPassword] 🔗 Walrus blob ID (acts as decentralized CID):', zircuitObject.walrusCid)
-      console.log('[AddPassword] 🌐 Blob will be accessible via:', `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${zircuitObject.walrusCid}`)
+      console.log('[AddPassword] 🔗 Walrus blob ID (acts as decentralized CID):', zircuitObj.walrusCid)
+      console.log('[AddPassword] 🌐 Blob will be accessible via:', `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${zircuitObj.walrusCid}`)
       console.log('[AddPassword] ⚡ Next: Submit ZircuitObject to blockchain for indexing')
       
       // Step 5: Save to localStorage for immediate use
@@ -321,7 +406,7 @@ export default function AddPasswordPage() {
         needsUpdate: false,
         walrusMetadata: {
           blobId: walrusBlobId,
-          ipfsCid: zircuitObject.walrusCid,
+          ipfsCid: zircuitObj.walrusCid,
           storageEpoch: Math.floor(Date.now() / 1000),
           encryptionKey: base64Key,
           uploadedAt: new Date().toISOString()
@@ -331,32 +416,44 @@ export default function AddPasswordPage() {
       const savedEntry = VaultStorageService.addEntry(vaultEntry)
       console.log('[AddPassword] ✅ Saved to localStorage with ID:', savedEntry.id)
       
-      // TODO: Step 6: Submit ZircuitObject to smart contract
-      /*
-      // Example of how to submit to Zircuit smart contract:
-      // 
-      // 1. Import wagmi hooks
-      // import { useContractWrite, usePrepareContractWrite } from 'wagmi'
-      // 
-      // 2. Prepare contract write
-      // const { config } = usePrepareContractWrite({
-      //   address: '0x...', // VaultRegistry contract address on Zircuit
-      //   abi: VaultRegistryABI,
-      //   functionName: 'storePassword',
-      //   args: [
-      //     zircuitObject.storedHash,     // bytes32 storedHash (hash of password)
-      //     zircuitObject.walrusCid       // string walrusCid (CID from Walrus)
-      //   ]
-      // })
-      // 
-      // 3. Execute transaction
-      // const { write: submitToZircuit } = useContractWrite(config)
-      // await submitToZircuit()
-      // 
-      // 4. Wait for transaction confirmation
-      // const { data: txData, isSuccess } = await submitToZircuit()
-      // console.log('[AddPassword] Transaction submitted:', txData?.hash)
-      */
+      // Step 6: Submit ZircuitObject to smart contract
+      console.log('[AddPassword] 🔗 Submitting to ShadowVaultV2 smart contract...')
+      console.log('[AddPassword] 📋 Contract Address:', ShadowVaultV2Address)
+      console.log('[AddPassword] 📋 Network: Zircuit Garfield Testnet (Chain ID: 48898)')
+      console.log('[AddPassword] 📋 Function: storeVaultItem')
+      console.log('[AddPassword] 📋 Args:', {
+        storedHash: zircuitObj.storedHash.slice(0, 16) + '...',
+        walrusCid: zircuitObj.walrusCid
+      })
+
+      try {
+        setIsSubmittingToContract(true)
+        
+        if (!writeContract) {
+          throw new Error('Contract write not available. Please check wallet connection and network.')
+        }
+
+        console.log('[AddPassword] 🚀 Executing contract transaction...')
+        
+        // Use Wagmi v2 writeContract function
+        writeContract({
+          address: ShadowVaultV2Address,
+          abi: ShadowVaultV2ABI,
+          functionName: 'storeVaultItem',
+          args: [zircuitObj.storedHash, zircuitObj.walrusCid],
+          chainId: 48898, // Zircuit Garfield Testnet
+        })
+
+        // The transaction will be handled by the useWaitForTransactionReceipt hook
+        console.log('[AddPassword] ⏳ Transaction submitted, waiting for confirmation...')
+        console.log('[AddPassword] 📱 You can monitor the transaction in your wallet')
+        
+      } catch (submitError) {
+        console.error('[AddPassword] ❌ Contract submission failed:', submitError)
+        setIsSubmittingToContract(false)
+        // Continue with the process even if contract submission fails
+        console.log('[AddPassword] 🔄 Continuing with local storage (contract submission can be retried later)')
+      }
       
       // TODO: Step 7: Generate ZK proof of password strength
       // TODO: Step 8: Index with Envio
@@ -385,6 +482,7 @@ export default function AddPasswordPage() {
   }
 
   const isFormValid = formData.name && formData.username && formData.password && formData.category && formData.network
+  const isWalletConnected = currentWalletAddress && ready && authenticated
 
   return (
     <div className="min-h-screen bg-background">
@@ -606,12 +704,22 @@ export default function AddPasswordPage() {
                 <Button
                   className="flex-1 bg-primary hover:bg-primary/90"
                   onClick={handleSave}
-                  disabled={!isFormValid || isSaving}
+                  disabled={!isFormValid || !isWalletConnected || isSaving || isSubmittingToContract || isContractWritePending}
                 >
                   {isSaving ? (
                     <>
                       <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                       Saving to {networks.find((n) => n.id === formData.network)?.name}...
+                    </>
+                  ) : isSubmittingToContract || isContractWritePending || isContractTxPending ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Submitting to Blockchain...
+                    </>
+                  ) : !isWalletConnected ? (
+                    <>
+                      <AlertCircle className="w-4 h-4 mr-2" />
+                      Connect Wallet Required
                     </>
                   ) : (
                     <>
