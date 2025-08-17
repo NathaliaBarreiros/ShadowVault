@@ -28,7 +28,11 @@ import {
   AlertTriangle,
   Globe,
   Zap,
-  Clock
+  Clock,
+  Database,
+  Info,
+  Heart,
+  Trash2
 } from "lucide-react"
 import Link from "next/link"
 import { useAccount, useSignMessage } from "wagmi"
@@ -38,96 +42,102 @@ import {
   retrieveAndDecryptVaultItem
 } from "@/lib/encryption"
 
-import { Skeleton } from "@/components/ui/skeleton";
-
-interface PasswordEntry {
-  id: string
-  name: string
-  username: string
-  password: string
-  url: string
-  network: "ethereum" | "polygon" | "zircuit" | "arbitrum" | "optimism"
-  aiStrength: number
-  lastAccessed: string
-  category: "social" | "work" | "finance" | "entertainment" | "shopping"
-  isFavorite: boolean
-  needsUpdate: boolean
-}
+import { Skeleton } from "@/components/ui/skeleton"
+import { VaultStorageService, initializeSampleData, type VaultEntry } from "@/lib/vault-storage"
+import { toast } from "@/hooks/use-toast"
 
 export default function VaultPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({})
   const [copyingId, setCopyingId] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
+  const [passwords, setPasswords] = useState<VaultEntry[]>([])
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
-  // --- Mock Data for Demo Purposes ---
-  // TODO: Remove this section once the indexer is fully integrated and stable.
-  const passwords: PasswordEntry[] = [
-    {
-      id: "1",
-      name: "Netflix",
-      username: "john.doe@email.com",
-      password: "SecurePass123!",
-      url: "netflix.com",
-      network: "ethereum",
-      aiStrength: 92,
-      lastAccessed: "2 minutes ago",
-      category: "entertainment",
-      isFavorite: true,
-      needsUpdate: false,
-    },
-    {
-      id: "2",
-      name: "GitHub",
-      username: "johndoe",
-      password: "OldPassword456",
-      url: "github.com",
-      network: "polygon",
-      aiStrength: 45,
-      lastAccessed: "15 minutes ago",
-      category: "work",
-      isFavorite: false,
-      needsUpdate: true,
-    },
-    {
-      id: "3",
-      name: "LinkedIn",
-      username: "john.doe@email.com",
-      password: "NewSecure789#",
-      url: "linkedin.com",
-      network: "zircuit",
-      aiStrength: 96,
-      lastAccessed: "1 hour ago",
-      category: "work",
-      isFavorite: true,
-      needsUpdate: false,
-    },
-    {
-      id: "4",
-      name: "Chase Bank",
-      username: "johndoe123",
-      password: "BankSecure2024$",
-      url: "chase.com",
-      network: "arbitrum",
-      aiStrength: 88,
-      lastAccessed: "3 hours ago",
-      category: "finance",
-      isFavorite: false,
-      needsUpdate: false,
-    },
-    {
-      id: "5",
-      name: "Amazon",
-      username: "john.doe@email.com",
-      password: "ShopSafe456!",
-      url: "amazon.com",
-      network: "optimism",
-      aiStrength: 78,
-      lastAccessed: "1 day ago",
-      category: "shopping",
-      isFavorite: false,
-      needsUpdate: false,
-    },    
-  ];
+  // Load vault entries from localStorage on component mount
+  useEffect(() => {
+    console.log('[Vault] Loading vault entries from localStorage...')
+    
+    // Debug: Check what's in localStorage
+    const rawData = localStorage.getItem('shadowvault_entries')
+    console.log('[Vault] Raw localStorage data:', rawData)
+    
+    // initializeSampleData() // Initialize sample data if empty - disabled for testing
+    const entries = VaultStorageService.getEntries()
+    setPasswords(entries)
+    console.log('[Vault] Loaded', entries.length, 'entries:', entries)
+    if (entries.length === 0) {
+      console.log('[Vault] No entries found - vault is empty')
+    }
+  }, [refreshTrigger])
+
+  // Refresh vault data
+  const refreshVault = () => {
+    setRefreshTrigger(prev => prev + 1)
+    toast({
+      title: "Vault Refreshed",
+      description: "Vault data reloaded from localStorage"
+    })
+  }
+
+  const clearVault = () => {
+    if (confirm('Clear all vault data? This will delete all stored passwords.')) {
+      console.log('[Vault] Clearing all localStorage data...')
+      
+      // Clear using service
+      VaultStorageService.clearAll()
+      
+      // Also manually clear in case there's cached data
+      localStorage.removeItem('shadowvault_entries')
+      localStorage.removeItem('shadowvault_stats')
+      
+      // Clear component state
+      setPasswords([])
+      
+      console.log('[Vault] All data cleared')
+      setRefreshTrigger(prev => prev + 1)
+      toast({
+        title: "Vault Cleared",
+        description: "All vault data has been deleted"
+      })
+    }
+  }
+
+  const debugStorage = () => {
+    console.group('🔍 LocalStorage Debug')
+    console.log('Raw localStorage data:')
+    console.log('shadowvault_entries:', localStorage.getItem('shadowvault_entries'))
+    console.log('shadowvault_stats:', localStorage.getItem('shadowvault_stats'))
+    
+    const entries = VaultStorageService.getEntries()
+    console.log('Parsed entries:', entries)
+    console.log('Current passwords state:', passwords)
+    
+    // Check if any entries look like sample data
+    const sampleDataEntries = entries.filter(entry => 
+      entry.name === 'Netflix' || entry.name === 'GitHub' || entry.name === 'LinkedIn'
+    )
+    console.log('Sample data entries found:', sampleDataEntries.length)
+    
+    console.groupEnd()
+    
+    toast({
+      title: "Debug Info Logged",
+      description: "Check console for localStorage details"
+    })
+  }
+
+  const initializeSampleForTesting = () => {
+    if (confirm('Initialize sample data for testing?')) {
+      initializeSampleData()
+      setRefreshTrigger(prev => prev + 1)
+      toast({
+        title: "Sample Data Added",
+        description: "Test data has been initialized"
+      })
+    }
+  }
 
   const networkColors = {
     ethereum: "bg-blue-100 text-blue-800",
@@ -157,13 +167,101 @@ export default function VaultPage() {
     setShowPasswords((prev) => ({ ...prev, [id]: !prev[id] }))
   }
 
-  const copyPassword = async (password: any) => {
+  const copyPassword = async (password: VaultEntry) => {
     setCopyingId(password.id)
-    // In a real implementation, this is where you would call the smart contract
-    // to get the encrypted data and then decrypt it client-side.
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-    await navigator.clipboard.writeText("Decrypted password would go here");
-    setCopyingId(null)
+    try {
+      // Update last accessed time
+      VaultStorageService.updateLastAccessed(password.id)
+      
+      // In a real implementation, this would decrypt from Walrus
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await navigator.clipboard.writeText(password.password)
+      
+      toast({
+        title: "Password Copied",
+        description: `${password.name} password copied to clipboard`
+      })
+      
+      // Refresh to show updated "last accessed" time
+      setRefreshTrigger(prev => prev + 1)
+    } catch (error) {
+      toast({
+        title: "Copy Failed",
+        description: "Failed to copy password to clipboard",
+        variant: "destructive"
+      })
+    } finally {
+      setCopyingId(null)
+    }
+  }
+
+  const toggleFavorite = (id: string) => {
+    VaultStorageService.toggleFavorite(id)
+    setRefreshTrigger(prev => prev + 1)
+    toast({
+      title: "Updated",
+      description: "Favorite status updated"
+    })
+  }
+
+  const deleteEntry = (id: string, name: string) => {
+    if (confirm(`Delete password for ${name}?`)) {
+      VaultStorageService.deleteEntry(id)
+      setRefreshTrigger(prev => prev + 1)
+      toast({
+        title: "Deleted",
+        description: `${name} password deleted`
+      })
+    }
+  }
+
+  const logWalrusInfo = (password: VaultEntry) => {
+    console.group(`🐋 Walrus Info for ${password.name}`)
+    
+    // Log the full entry data
+    console.log('📄 Full Entry Data:', password)
+    
+    // Log Walrus metadata if available
+    if (password.walrusMetadata) {
+      console.log('🗄️ Walrus Metadata:', password.walrusMetadata)
+      console.log('📋 Blob ID:', password.walrusMetadata.blobId)
+      console.log('🔗 IPFS CID:', password.walrusMetadata.ipfsCid)
+      console.log('⏰ Uploaded At:', password.walrusMetadata.uploadedAt)
+      console.log('🔐 Encryption Key:', password.walrusMetadata.encryptionKey ? 'Present' : 'Not Available')
+    } else {
+      console.log('⚠️ No Walrus metadata found - entry may not be uploaded to Walrus yet')
+      
+      // Simulate what the Walrus JSON would look like
+      const mockWalrusData = {
+        blobId: `walrus_${password.id}_${Date.now()}`,
+        ipfsCid: `Qm${Math.random().toString(36).substr(2, 44)}`,
+        storageEpoch: Math.floor(Date.now() / 1000),
+        encryptedPayload: {
+          name: password.name,
+          username: password.username,
+          password: "[ENCRYPTED]",
+          url: password.url,
+          metadata: {
+            category: password.category,
+            network: password.network,
+            aiStrength: password.aiStrength
+          }
+        },
+        uploadedAt: new Date().toISOString()
+      }
+      console.log('🔮 Mock Walrus Data Structure:', mockWalrusData)
+    }
+    
+    // Log storage stats
+    const stats = VaultStorageService.getStats()
+    console.log('📊 Storage Stats:', stats)
+    
+    console.groupEnd()
+    
+    toast({
+      title: "Walrus Info Logged",
+      description: `Check console for ${password.name} details`
+    })
   }
 
 
@@ -199,10 +297,26 @@ export default function VaultPage() {
                 <p className="text-sm text-muted-foreground">{filteredPasswords.length} passwords secured</p>
               </div>
             </div>
-            <Button className="bg-primary hover:bg-primary/90">
-              <Plus className="w-4 h-4 mr-2" />
-              <Link href="/vault/add">Add Password</Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={refreshVault}>
+                <Database className="w-4 h-4 mr-2" />
+                Refresh
+              </Button>
+              <Button variant="outline" onClick={clearVault} className="text-red-600 hover:text-red-700">
+                <Trash2 className="w-4 h-4 mr-2" />
+                Clear All
+              </Button>
+              <Button variant="outline" onClick={debugStorage}>
+                <Info className="w-4 h-4 mr-2" />
+                Debug
+              </Button>
+              <Link href="/vault/add">
+                <Button className="bg-primary hover:bg-primary/90">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Password
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </header>
@@ -240,9 +354,28 @@ export default function VaultPage() {
           {error && <p className="text-red-500 col-span-full">Error fetching data, showing mock data instead: {error.message}</p>}
           {filteredPasswords.map((password) => (
             <Card key={password.id} className="relative hover:shadow-lg transition-shadow">
-              {password.isFavorite && <Star className="absolute top-3 right-3 w-4 h-4 text-yellow-500 fill-current" />}
+              <div className="absolute top-3 right-3 flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleFavorite(password.id)}
+                  className="h-8 w-8 p-0"
+                >
+                  <Heart 
+                    className={`w-4 h-4 ${password.isFavorite ? 'text-red-500 fill-current' : 'text-gray-400'}`} 
+                  />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => deleteEntry(password.id, password.name)}
+                  className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
 
-              <CardHeader className="pb-3">
+              <CardHeader className="pb-3 pr-20">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg flex items-center gap-2">
                     <span className="text-lg">{categoryIcons[password.category]}</span>
@@ -299,29 +432,42 @@ export default function VaultPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center justify-between pt-2">
+                <div className="space-y-3 pt-2">
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Clock className="w-3 h-3" />
                     {password.lastAccessed}
                   </div>
-                  <Button
-                    size="sm"
-                    onClick={() => copyPassword(password)}
-                    disabled={copyingId === password.id}
-                    className="bg-secondary hover:bg-secondary/90"
-                  >
-                    {copyingId === password.id ? (
-                      <>
-                        <Globe className="w-3 h-3 mr-1 animate-spin" />
-                        Retrieving...
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3 h-3 mr-1" />
-                        Copy
-                      </>
-                    )}
-                  </Button>
+                  
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => copyPassword(password)}
+                      disabled={copyingId === password.id}
+                      className="bg-secondary hover:bg-secondary/90 flex-1"
+                    >
+                      {copyingId === password.id ? (
+                        <>
+                          <Globe className="w-3 h-3 mr-1 animate-spin" />
+                          Retrieving...
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3 h-3 mr-1" />
+                          Copy
+                        </>
+                      )}
+                    </Button>
+                    
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => logWalrusInfo(password)}
+                      className="flex-1"
+                    >
+                      <Info className="w-3 h-3 mr-1" />
+                      Walrus
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -336,10 +482,12 @@ export default function VaultPage() {
             <p className="text-muted-foreground mb-4">
               {searchQuery ? "Try adjusting your search terms" : "Start by adding your first password"}
             </p>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              <Link href="/vault/add">Add Password</Link>
-            </Button>
+            <Link href="/vault/add">
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Password
+              </Button>
+            </Link>
           </div>
         )}
       </div>

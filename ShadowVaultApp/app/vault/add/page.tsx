@@ -27,6 +27,7 @@ import {
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { deriveEncryptionKeyFromSignature, createVaultItemCipher, createZircuitObject } from "@/lib/encryption"
+import { VaultStorageService, type VaultEntry } from "@/lib/vault-storage"
 
 interface NetworkOption {
   id: string
@@ -211,6 +212,8 @@ export default function AddPasswordPage() {
       // Step 4.1: Upload VaultItemCipher to Walrus to get blob ID
       console.log('[AddPassword] 🔄 Uploading VaultItemCipher to Walrus...')
       
+      let walrusBlobId: string
+      
       try {
         // 1. Prepare VaultItemCipher data for storage
         const vaultItemJson = JSON.stringify(vaultItem, null, 2)
@@ -278,18 +281,17 @@ export default function AddPasswordPage() {
         console.log('[AddPassword] 📝 Note: The URL contains encrypted data that can only be decrypted with the encryption key')
         
         // Use the Walrus blob ID as the "CID" for ZircuitObject
-        const walrusBlobId = blobId
+        walrusBlobId = blobId
+        console.log('[AddPassword] ✅ Using real Walrus blob ID:', walrusBlobId)
         
       } catch (walrusError) {
         console.error('[AddPassword] ❌ Walrus upload failed:', walrusError)
         console.log('[AddPassword] 🔄 Falling back to mock storage for development...')
         
         // Fallback to mock for development
-        const walrusBlobId = "WalrusMockBlobId_" + Date.now() // Fallback mock ID
+        walrusBlobId = "WalrusMockBlobId_" + Date.now() // Fallback mock ID
+        console.log('[AddPassword] 🔧 Using fallback blob ID:', walrusBlobId)
       }
-      
-      // For now, use mock until we implement the full Walrus integration above
-      const walrusBlobId = "WalrusMockBlobId_" + Date.now() // TODO: Replace with real Walrus blob ID
       
       console.log('[AddPassword] 🏗️ Creating ZircuitObject with Walrus blob ID:', walrusBlobId)
       const zircuitObject = await createZircuitObject(vaultItem, address, walrusBlobId)
@@ -309,7 +311,32 @@ export default function AddPasswordPage() {
       console.log('[AddPassword] 🌐 Blob will be accessible via:', `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${zircuitObject.ipfsCid}`)
       console.log('[AddPassword] ⚡ Next: Submit ZircuitObject to blockchain for indexing')
       
-      // TODO: Step 5: Submit ZircuitObject to smart contract
+      // Step 5: Save to localStorage for immediate use
+      console.log('[AddPassword] 💾 Saving to localStorage...')
+      const vaultEntry: Omit<VaultEntry, 'id' | 'createdAt' | 'updatedAt'> = {
+        name: formData.name,
+        username: formData.username,
+        password: formData.password,
+        url: formData.url,
+        network: formData.network as VaultEntry['network'],
+        aiStrength: passwordStrength,
+        lastAccessed: 'Just created',
+        category: formData.category as VaultEntry['category'],
+        isFavorite: false,
+        needsUpdate: false,
+        walrusMetadata: {
+          blobId: walrusBlobId,
+          ipfsCid: zircuitObject.ipfsCid,
+          storageEpoch: Math.floor(Date.now() / 1000),
+          encryptionKey: base64Key,
+          uploadedAt: new Date().toISOString()
+        }
+      }
+      
+      const savedEntry = VaultStorageService.addEntry(vaultEntry)
+      console.log('[AddPassword] ✅ Saved to localStorage with ID:', savedEntry.id)
+      
+      // TODO: Step 6: Submit ZircuitObject to smart contract
       /*
       // Example of how to submit to Zircuit smart contract:
       // 
@@ -339,13 +366,15 @@ export default function AddPasswordPage() {
       // console.log('[AddPassword] Transaction submitted:', txData?.hash)
       */
       
-      // TODO: Step 6: Generate ZK proof of password strength
-      // TODO: Step 7: Index with Envio
+      // TODO: Step 7: Generate ZK proof of password strength
+      // TODO: Step 8: Index with Envio
       
       // Simulate remaining steps for now
       await new Promise((resolve) => setTimeout(resolve, 1000))
       
-      console.log('[AddPassword] Password saved successfully!')
+      console.log('[AddPassword] 🎉 Password saved successfully!')
+      console.log('[AddPassword] 📱 Available immediately in vault')
+      console.log('[AddPassword] 🔗 Walrus integration ready for blockchain submission')
       
     } catch (error) {
       console.error('[AddPassword] Error during save:', error)
