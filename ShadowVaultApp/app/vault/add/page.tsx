@@ -24,12 +24,19 @@ import {
   AlertCircle,
   CheckCircle,
   Copy,
+  Lock,
+  ExternalLink,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+// Main functionality imports
 import { deriveEncryptionKeyFromSignature, createVaultItemCipher, createZircuitObject } from "@/lib/encryption"
 import { VaultStorageService, type VaultEntry } from "@/lib/vault-storage"
 import { ShadowVaultV2Address, ShadowVaultV2ABI } from "@/lib/contracts/ShadowVaultV2"
+
+// ZK Proof functionality imports
+import { generateAndVerifyZKProof, PasswordStrengthResult } from "../../../lib/noir-integration"
+import { useVerifyPasswordStrength, useCommitVaultItem, prepareProofForVerification } from "../../../lib/contract-integration"
 
 interface NetworkOption {
   id: string
@@ -42,9 +49,26 @@ interface NetworkOption {
 export default function AddPasswordPage() {
   const router = useRouter()
   const { address } = useAccount()
+  
+  // Privy hooks
   const { signMessageAsync } = useSignMessage()
   const { ready, authenticated, user } = usePrivy()
   const { wallets } = useWallets()
+  
+  // Contract integration hooks
+  const { 
+    verifyPasswordStrength, 
+    isPending: isVerifyingOnChain, 
+    isSuccess: onChainVerificationSuccess,
+    error: onChainError,
+    hash: transactionHash
+  } = useVerifyPasswordStrength()
+  
+  const { 
+    commitVaultItem, 
+    isPending: isCommitting, 
+    isSuccess: commitSuccess 
+  } = useCommitVaultItem()
   const [formData, setFormData] = useState({
     name: "",
     username: "",
@@ -61,10 +85,18 @@ export default function AddPasswordPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([])
+  
+  // Main functionality state
   const [zircuitObject, setZircuitObject] = useState<{ storedHash: string; walrusCid: string } | null>(null)
   const [isSubmittingToContract, setIsSubmittingToContract] = useState(false)
   const [encryptionKey, setEncryptionKey] = useState<string>('')
   const [vaultItemCipher, setVaultItemCipher] = useState<any>(null)
+
+  // ZK Proof functionality state
+  const [zkProof, setZkProof] = useState<any>(null)
+  const [zkVerified, setZkVerified] = useState<boolean | null>(null)
+  const [isGeneratingZK, setIsGeneratingZK] = useState(false)
+  const [onChainVerificationStatus, setOnChainVerificationStatus] = useState<string>("")
 
   // Wagmi v2 hooks for contract interaction
   const { writeContract, data: contractTxHash, isPending: isContractWritePending, error: contractError } = useWriteContract()
@@ -242,36 +274,20 @@ export default function AddPasswordPage() {
     // Simulate AI password generation
     await new Promise((resolve) => setTimeout(resolve, 1500))
 
-    const chars = {
-      lower: "abcdefghijklmnopqrstuvwxyz",
-      upper: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-      numbers: "0123456789",
-      symbols: "!@#$%^&*()_+-=[]{}|;:,.<>?",
-    }
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+';
+    const len = 24;
+    const array = new Uint32Array(len);
 
     let password = ""
-
-    // Ensure at least one of each type
-    password += chars.lower[Math.floor(Math.random() * chars.lower.length)]
-    password += chars.upper[Math.floor(Math.random() * chars.upper.length)]
-    password += chars.numbers[Math.floor(Math.random() * chars.numbers.length)]
-    password += chars.symbols[Math.floor(Math.random() * chars.symbols.length)]
-
-    // Fill remaining length
-    const allChars = chars.lower + chars.upper + chars.numbers + chars.symbols
-    for (let i = 4; i < 16; i++) {
-      password += allChars[Math.floor(Math.random() * allChars.length)]
-    }
-
-    // Shuffle the password
-    password = password
-      .split("")
-      .sort(() => Math.random() - 0.5)
-      .join("")
-
+    
+    crypto.getRandomValues(array);
+    password = Array.from(array, x => chars[x % chars.length]).join('');
+    
     setFormData((prev) => ({ ...prev, password }))
     analyzePasswordStrength(password)
     setIsGenerating(false)
+
+    return password;
   }
 
   const handleInputChange = (field: string, value: string) => {
@@ -283,6 +299,111 @@ export default function AddPasswordPage() {
 
   const copyPassword = async () => {
     await navigator.clipboard.writeText(formData.password)
+  }
+
+  const generateZKProof = async () => {
+    if (!formData.password) return
+    
+    setIsGeneratingZK(true)
+    setZkProof(null)
+    setZkVerified(null)
+    
+    try {
+      const result = await generateAndVerifyZKProof(formData.password)
+      console.log('🔐 ZK Proof result:', result)
+      console.log('🔐 result.isValid:', result.isValid)
+      console.log('🔐 result.proof:', result.proof)
+      
+      setZkProof(result.proof)
+      setZkVerified(result.isValid)
+      
+      console.log('🔐 ZK Proof generated successfully:', result)
+      console.log('🔐 Setting zkVerified to:', result.isValid)
+      
+      // Force state update
+      setTimeout(() => {
+        console.log('🔐 zkVerified after timeout:', result.isValid)
+        setZkVerified(result.isValid)
+      }, 100)
+    } catch (error) {
+      console.error('❌ Error generating ZK proof:', error)
+      setZkVerified(false)
+    } finally {
+      setIsGeneratingZK(false)
+    }
+  }
+
+  const verifyOnChain = async () => {
+    if (!zkProof || !address) {
+      alert("Please generate ZK proof first and ensure wallet is connected")
+      return
+    }
+
+    try {
+      setOnChainVerificationStatus("Preparing proof for blockchain...")
+      
+      // Prepare proof data for on-chain verification
+      const { proof, publicInputs } = prepareProofForVerification(zkProof)
+      
+      console.log("🔗 Sending proof to Zircuit testnet...", {
+        proofLength: proof?.length || 'undefined',
+        proofType: typeof proof,
+        publicInputs,
+        userAddress: address
+      })
+      
+      // Call the smart contract - pass arguments directly, not wrapped in args object
+      verifyPasswordStrength({
+        proof: proof,
+        publicInputs: publicInputs,
+        user: address
+      })
+      
+      setOnChainVerificationStatus("Transaction sent! Waiting for confirmation...")
+    } catch (error) {
+      console.error("❌ Error verifying on-chain:", error)
+      setOnChainVerificationStatus("Error: " + (error as Error).message)
+    }
+  }
+
+  const savePasswordWithVerification = async () => {
+    if (!zkProof || !address) {
+      alert("Please generate ZK proof first and ensure wallet is connected")
+      return
+    }
+
+    try {
+      setIsSaving(true)
+      
+      // TODO: Step 1: Create VaultItemCipher (encryption)
+      // TODO: Step 2: Upload to IPFS
+      // TODO: Step 3: Create ZircuitObject
+      
+      // For now, we'll just verify the password strength on-chain
+      const { proof, publicInputs } = prepareProofForVerification(zkProof)
+      
+      // Mock data for demonstration
+      const itemIdHash = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+      const itemCommitment = "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      const itemCipherCID = "QmMockCidForDemonstration"
+      
+      console.log("🔗 Committing vault item to Zircuit testnet...")
+      
+      // Commit to smart contract - pass arguments directly, not wrapped in args object
+      commitVaultItem({
+        itemIdHash: itemIdHash,
+        itemCommitment: itemCommitment,
+        itemCipherCID: itemCipherCID,
+        proof: proof,
+        publicInputs: publicInputs
+      })
+      
+    } catch (error) {
+      console.error("❌ Error saving password:", error)
+      alert("Error saving password: " + (error as Error).message)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleSave = async () => {
@@ -499,7 +620,7 @@ export default function AddPasswordPage() {
       
     } catch (error) {
       console.error('[AddPassword] Error during save:', error)
-      setIsSaving(false)
+    setIsSaving(false)
       // TODO: Show error to user
     } finally {
       setIsSaving(false)
@@ -591,19 +712,42 @@ export default function AddPasswordPage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password *</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={generatePassword} disabled={isGenerating}>
-                    {isGenerating ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-4 h-4 mr-2" />
-                        Generate Strong Password
-                      </>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={generatePassword} disabled={isGenerating}>
+                      {isGenerating ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-4 h-4 mr-2" />
+                          Generate Strong Password
+                        </>
+                      )}
+                    </Button>
+                    {formData.password && (
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={generateZKProof} 
+                        disabled={isGeneratingZK}
+                      >
+                        {isGeneratingZK ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                            Generating ZK Proof...
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-4 h-4 mr-2" />
+                            Generate ZK Proof
+                          </>
+                        )}
+                      </Button>
                     )}
-                  </Button>
+                  </div>
                 </div>
 
                 <div className="relative">
@@ -651,6 +795,140 @@ export default function AddPasswordPage() {
                             </ul>
                           </div>
                         </div>
+                      </div>
+                    )}
+
+                    {/* ZK Proof Result */}
+                    {zkVerified !== null && (
+                      <div className={`border rounded-lg p-3 ${
+                        zkVerified 
+                          ? 'bg-green-50 border-green-200' 
+                          : 'bg-red-50 border-red-200'
+                      }`}>
+                        <div className="flex items-start gap-2">
+                          {zkVerified ? (
+                            <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                          )}
+                          <div>
+                            <p className={`text-sm font-medium ${
+                              zkVerified ? 'text-green-800' : 'text-red-800'
+                            }`}>
+                              {zkVerified ? 'ZK Proof Valid' : 'ZK Proof Failed'}
+                            </p>
+                            <p className={`text-sm ${
+                              zkVerified ? 'text-green-700' : 'text-red-700'
+                            }`}>
+                              {zkVerified 
+                                ? 'Password strength verified with Zero-Knowledge proof'
+                                : 'Password does not meet strength criteria for ZK proof'
+                              }
+                            </p>
+                            {zkProof && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Circuit Hash: {zkProof.circuitHash}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* On-Chain Verification */}
+                    {zkVerified === true && (
+                      <div className="space-y-3">
+                        {/* Debug info */}
+                        <div className="text-xs text-muted-foreground">
+                          Debug: zkVerified={zkVerified}, address={address ? 'connected' : 'not connected'}, isVerifyingOnChain={isVerifyingOnChain}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={verifyOnChain}
+                          disabled={isVerifyingOnChain || !address}
+                          className="w-full"
+                        >
+                          {isVerifyingOnChain ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                              Verifying on Zircuit...
+                            </>
+                          ) : (
+                            <>
+                              <Globe className="w-4 h-4 mr-2" />
+                              Verify on Zircuit Testnet
+                            </>
+                          )}
+                        </Button>
+
+                        {onChainVerificationStatus && (
+                          <div className="text-sm text-muted-foreground">
+                            {onChainVerificationStatus}
+                          </div>
+                        )}
+
+                        {onChainVerificationSuccess && (
+                          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                            <div className="flex items-start gap-2">
+                              <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-green-800">
+                                  ✅ Verified on Zircuit Testnet!
+                                </p>
+                                <p className="text-sm text-green-700">
+                                  Password strength proof verified on-chain
+                                </p>
+                                
+                                {transactionHash && (
+                                  <div className="mt-2 pt-2 border-t border-green-200">
+                                    <p className="text-xs text-green-600 mb-1">Transaction Hash:</p>
+                                    <div className="flex items-center gap-2">
+                                      <code className="text-xs bg-green-100 px-2 py-1 rounded text-green-800 font-mono">
+                                        {transactionHash.slice(0, 10)}...{transactionHash.slice(-8)}
+                                      </code>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 px-2 text-xs text-green-600 hover:text-green-800"
+                                        onClick={() => {
+                                          const explorerUrl = `https://sepolia.basescan.org/tx/${transactionHash}`;
+                                          window.open(explorerUrl, '_blank');
+                                        }}
+                                      >
+                                        <ExternalLink className="w-3 h-3 mr-1" />
+                                        View
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {onChainError && (
+                          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                            <div className="flex items-start gap-2">
+                              <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <p className="text-sm font-medium text-red-800">
+                                  ❌ On-Chain Verification Failed
+                                </p>
+                                <p className="text-sm text-red-700">
+                                  {(() => {
+                                    console.log("🔍 onChainError object:", onChainError);
+                                    console.log("🔍 onChainError type:", typeof onChainError);
+                                    console.log("🔍 onChainError keys:", Object.keys(onChainError || {}));
+                                    console.log("🔍 onChainError.message:", onChainError.message);
+                                    console.log("🔍 onChainError.message type:", typeof onChainError.message);
+                                    return onChainError.message || "Unknown error occurred";
+                                  })()}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

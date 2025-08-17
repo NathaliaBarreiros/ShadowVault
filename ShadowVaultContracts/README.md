@@ -381,11 +381,13 @@ cp .env.example .env
 
 ## ⚙️ Configuration
 
-Edit `.env` file with your credentials:
+### Environment Variables
+
+Create a `.env` file in the `ShadowVaultContracts` directory:
 
 ```env
-# Private key for deployment (without 0x prefix)
-PRIVATE_KEY=your_private_key_here
+# Zircuit Testnet Configuration
+ZIRCUIT_RPC_URL=https://rpc.zircuit.com
 
 # Zircuit RPC URL (optional, defaults to public RPC)
 ZIRCUIT_RPC_URL=https://garfield-testnet.zircuit.com
@@ -393,6 +395,21 @@ ZIRCUIT_RPC_URL=https://garfield-testnet.zircuit.com
 # Enable gas reporting
 REPORT_GAS=false
 ```
+
+### Environment Validation
+
+Before deployment, validate your environment setup:
+
+```bash
+# Check if environment variables are properly configured
+npx hardhat run scripts/check-env.ts
+```
+
+This will verify:
+- All required variables are set
+- Private key format is correct
+- Wallet address can be computed
+- RPC URL is accessible
 
 ## 🔨 Development Commands
 
@@ -416,6 +433,21 @@ npm run clean
 ```
 
 ### Deployment
+
+#### Zircuit Testnet (Recommended for ZK Proofs)
+
+```bash
+# Validate environment variables
+npx hardhat run scripts/check-env.ts
+
+# Deploy PasswordStrengthVerifier to Zircuit testnet
+npx hardhat run scripts/deploy-password-verifier.ts --network zircuitTestnet
+
+# After deployment, update your frontend .env with:
+# NEXT_PUBLIC_PASSWORD_VERIFIER_ADDRESS=<deployed_contract_address>
+```
+
+#### Base Sepolia (Legacy)
 
 ```bash
 # Deploy to Zircuit Garfield Testnet
