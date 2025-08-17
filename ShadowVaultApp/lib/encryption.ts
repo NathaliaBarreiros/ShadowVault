@@ -9,7 +9,6 @@ export interface VaultItemCipher {
   username: string;             // username (plaintext) 
   cipher: string;               // base64 AES-GCM ciphertext (password encriptado)
   iv: string;                   // 12-byte IV (base64)
-  encryptionKeyHash: string;    // SHA-256 de la clave derivada (para verificación)
   meta: {
     url?: string;
     notes?: string;
@@ -21,12 +20,8 @@ export interface VaultItemCipher {
 
 // ZircuitObject interface for on-chain data (no sensitive content)
 export interface ZircuitObject {
-  user: string;                 // user address
-  itemIdHash: string;           // keccak256(salt + domain + username)
-  itemCommitment: string;       // keccak256(itemIdHash + ipfsCid + encryptionKeyHash)
-  ipfsCid: string;             // IPFS CID of the VaultItemCipher
-  encryptionKeyHash: string;    // SHA-256 of encryption key
-  timestamp: string;           // ISO timestamp
+  storedHash: string;           // SHA-256 hash of the password
+  walrusCid: string;           // Walrus CID of the VaultItemCipher
 }
 
 export function hexToBytes(hex: string): Uint8Array {
@@ -171,11 +166,6 @@ export async function createVaultItemCipher(
   // Encrypt the password
   const { cipher, iv } = await encryptPasswordWithAES(payload.password, encryptionKey)
   
-  // Generate hash of encryption key for verification
-  const encryptionKeyHash = await sha256Bytes(encryptionKey)
-  const encryptionKeyHashHex = Array.from(encryptionKeyHash).map(b => b.toString(16).padStart(2, '0')).join('')
-  console.log('[Encryption] Encryption key hash:', encryptionKeyHashHex)
-  
   // Create VaultItemCipher
   const vaultItem: VaultItemCipher = {
     v: 1, // schema version
@@ -183,7 +173,6 @@ export async function createVaultItemCipher(
     username: payload.username,
     cipher: cipher,
     iv: iv,
-    encryptionKeyHash: encryptionKeyHashHex,
     meta: {
       url: payload.url,
       notes: payload.notes,
@@ -206,46 +195,25 @@ export async function createVaultItemCipher(
 }
 
 export async function createZircuitObject(
-  vaultItem: VaultItemCipher,
-  userAddress: string,
-  ipfsCid: string
+  password: string,
+  walrusCid: string
 ): Promise<ZircuitObject> {
   console.log('[Encryption] Creating ZircuitObject...')
   
-  // Generate random salt for commitment (different from HKDF salt)
-  const commitmentSalt = crypto.getRandomValues(new Uint8Array(32))
-  const commitmentSaltHex = Array.from(commitmentSalt).map(b => b.toString(16).padStart(2, '0')).join('')
-  console.log('[Encryption] Commitment salt (first 8 bytes):', commitmentSaltHex.slice(0, 16))
-  
-  // Calculate itemIdHash = keccak256(salt + domain + username)
-  const itemIdSource = `${commitmentSaltHex}${vaultItem.site}${vaultItem.username}`
-  const itemIdHash = await sha256Bytes(utf8ToBytes(itemIdSource))
-  const itemIdHashHex = Array.from(itemIdHash).map(b => b.toString(16).padStart(2, '0')).join('')
-  console.log('[Encryption] ItemIdHash (first 8 bytes):', itemIdHashHex.slice(0, 16))
-  
-  // Calculate itemCommitment = keccak256(itemIdHash + ipfsCid + encryptionKeyHash)
-  const commitmentSource = `${itemIdHashHex}${ipfsCid}${vaultItem.encryptionKeyHash}`
-  const itemCommitment = await sha256Bytes(utf8ToBytes(commitmentSource))
-  const itemCommitmentHex = Array.from(itemCommitment).map(b => b.toString(16).padStart(2, '0')).join('')
-  console.log('[Encryption] ItemCommitment (first 8 bytes):', itemCommitmentHex.slice(0, 16))
+  // Create storedHash (hash of the password)
+  const storedHash = await sha256Bytes(utf8ToBytes(password))
+  const storedHashHex = Array.from(storedHash).map(b => b.toString(16).padStart(2, '0')).join('')
+  console.log('[Encryption] StoredHash (first 8 bytes):', storedHashHex.slice(0, 16))
   
   // Create ZircuitObject
   const zircuitObject: ZircuitObject = {
-    user: userAddress,
-    itemIdHash: itemIdHashHex,
-    itemCommitment: itemCommitmentHex,
-    ipfsCid: ipfsCid,
-    encryptionKeyHash: vaultItem.encryptionKeyHash,
-    timestamp: vaultItem.meta.timestamp
+    storedHash: storedHashHex,
+    walrusCid: walrusCid
   }
   
   console.log('[Encryption] ZircuitObject created:', {
-    user: zircuitObject.user,
-    itemIdHash: zircuitObject.itemIdHash.slice(0, 16) + '...',
-    itemCommitment: zircuitObject.itemCommitment.slice(0, 16) + '...',
-    ipfsCid: zircuitObject.ipfsCid,
-    encryptionKeyHash: zircuitObject.encryptionKeyHash.slice(0, 16) + '...',
-    timestamp: zircuitObject.timestamp
+    storedHash: zircuitObject.storedHash.slice(0, 16) + '...',
+    walrusCid: zircuitObject.walrusCid
   })
   
   return zircuitObject
@@ -405,7 +373,6 @@ export async function retrieveAndDecryptVaultItem(
     username: "user@example.com",
     cipher: "mock-ciphertext-base64",
     iv: "mock-iv-base64",
-    encryptionKeyHash: "mock-encryption-key-hash",
     meta: {
       url: "https://example.com",
       notes: "Mock password entry",
@@ -416,16 +383,6 @@ export async function retrieveAndDecryptVaultItem(
   }
   
   console.log('[Decryption] VaultItemCipher retrieved from IPFS')
-  
-  // Verify encryption key hash matches
-  const currentKeyHash = await sha256Bytes(encryptionKey)
-  const currentKeyHashHex = Array.from(currentKeyHash).map(b => b.toString(16).padStart(2, '0')).join('')
-  
-  if (currentKeyHashHex !== mockVaultItem.encryptionKeyHash) {
-    throw new Error('Encryption key hash mismatch - cannot decrypt')
-  }
-  
-  console.log('[Decryption] Encryption key hash verified')
   
   // Decrypt the password
   const decryptedPassword = await decryptPasswordWithAES(
@@ -482,20 +439,12 @@ export async function getVaultItemsFromEnvio(
   // For demo purposes, return mock data
   const mockZircuitObjects: ZircuitObject[] = [
     {
-      user: userAddress,
-      itemIdHash: "mock-item-id-hash-1",
-      itemCommitment: "mock-item-commitment-1",
-      ipfsCid: "QmMockCid1",
-      encryptionKeyHash: "mock-encryption-key-hash-1",
-      timestamp: new Date().toISOString()
+      storedHash: "mock-stored-hash-1",
+      walrusCid: "QmMockCid1"
     },
     {
-      user: userAddress,
-      itemIdHash: "mock-item-id-hash-2",
-      itemCommitment: "mock-item-commitment-2",
-      ipfsCid: "QmMockCid2",
-      encryptionKeyHash: "mock-encryption-key-hash-2",
-      timestamp: new Date().toISOString()
+      storedHash: "mock-stored-hash-2",
+      walrusCid: "QmMockCid2"
     }
   ]
   

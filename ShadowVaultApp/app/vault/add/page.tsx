@@ -222,8 +222,7 @@ export default function AddPasswordPage() {
           site: vaultItem.site,
           username: vaultItem.username,
           cipherLength: vaultItem.cipher.length,
-          ivLength: vaultItem.iv.length,
-          encryptionKeyHash: vaultItem.encryptionKeyHash.slice(0, 16) + '...'
+          ivLength: vaultItem.iv.length
         })
         
         // 2. Convert to buffer for Walrus upload
@@ -294,21 +293,17 @@ export default function AddPasswordPage() {
       }
       
       console.log('[AddPassword] 🏗️ Creating ZircuitObject with Walrus blob ID:', walrusBlobId)
-      const zircuitObject = await createZircuitObject(vaultItem, address, walrusBlobId)
+      const zircuitObject = await createZircuitObject(formData.password, walrusBlobId)
       console.log('[AddPassword] ✅ ZircuitObject created successfully!')
       console.log('[AddPassword] 🚀 Ready for Zircuit blockchain submission:', {
-        user: zircuitObject.user,
-        itemIdHash: zircuitObject.itemIdHash.slice(0, 16) + '...',
-        itemCommitment: zircuitObject.itemCommitment.slice(0, 16) + '...',
-        walrusBlobId: zircuitObject.ipfsCid, // This field contains the Walrus blob ID
-        encryptionKeyHash: zircuitObject.encryptionKeyHash.slice(0, 16) + '...',
-        timestamp: zircuitObject.timestamp
+        storedHash: zircuitObject.storedHash.slice(0, 16) + '...',
+        walrusCid: zircuitObject.walrusCid
       })
       
       console.log('[AddPassword] 📊 Storage Summary:')
       console.log('[AddPassword] 🔐 Encrypted password stored on Walrus decentralized network')
-      console.log('[AddPassword] 🔗 Walrus blob ID (acts as decentralized CID):', zircuitObject.ipfsCid)
-      console.log('[AddPassword] 🌐 Blob will be accessible via:', `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${zircuitObject.ipfsCid}`)
+      console.log('[AddPassword] 🔗 Walrus blob ID (acts as decentralized CID):', zircuitObject.walrusCid)
+      console.log('[AddPassword] 🌐 Blob will be accessible via:', `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${zircuitObject.walrusCid}`)
       console.log('[AddPassword] ⚡ Next: Submit ZircuitObject to blockchain for indexing')
       
       // Step 5: Save to localStorage for immediate use
@@ -326,7 +321,7 @@ export default function AddPasswordPage() {
         needsUpdate: false,
         walrusMetadata: {
           blobId: walrusBlobId,
-          ipfsCid: zircuitObject.ipfsCid,
+          ipfsCid: zircuitObject.walrusCid,
           storageEpoch: Math.floor(Date.now() / 1000),
           encryptionKey: base64Key,
           uploadedAt: new Date().toISOString()
