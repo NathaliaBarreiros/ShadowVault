@@ -35,6 +35,8 @@ import {
   RefreshCw,
   Download,
   LogOut,
+  FileText,
+  Key,
 } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/components/providers/AuthProvider"
@@ -192,6 +194,8 @@ export default function ShadowVaultDashboard() {
       isDemo: true,
     },
     { icon: Vault, label: "View Vault", variant: "outline", href: "/vault" },
+    { icon: Key, label: "Add Seal", variant: "outline", href: "/seals/add", sealAction: true },
+    { icon: FileText, label: "View Seals", variant: "outline", href: "/seals", sealAction: true },
     { icon: Shield, label: "Security Scan", variant: "outline", href: "/security" },
     { icon: BarChart3, label: "Analytics", variant: "outline", href: "/analytics" },
   ]
