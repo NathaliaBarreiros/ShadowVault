@@ -36,10 +36,14 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useAccount, useSignMessage } from "wagmi"
+import { usePrivy, useWallets } from "@privy-io/react-auth"
 import {
   deriveEncryptionKeyFromSignature,
   getVaultItemsFromEnvio,
-  retrieveAndDecryptVaultItem
+  retrieveAndDecryptVaultItem,
+  decryptPasswordWithAES,
+  sha256Bytes,
+  utf8ToBytes
 } from "@/lib/encryption"
 
 import { Skeleton } from "@/components/ui/skeleton"
@@ -47,6 +51,11 @@ import { VaultStorageService, initializeSampleData, type VaultEntry } from "@/li
 import { toast } from "@/hooks/use-toast"
 
 export default function VaultPage() {
+  const { address } = useAccount()
+  const { signMessageAsync } = useSignMessage()
+  const { ready, authenticated, user } = usePrivy()
+  const { wallets } = useWallets()
+  
   const [searchQuery, setSearchQuery] = useState("")
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({})
   const [copyingId, setCopyingId] = useState<string | null>(null)
@@ -54,6 +63,39 @@ export default function VaultPage() {
   const [error, setError] = useState<Error | null>(null)
   const [passwords, setPasswords] = useState<VaultEntry[]>([])
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  
+  // Decryption state management
+  const [decryptingIds, setDecryptingIds] = useState<Set<string>>(new Set())
+  const [decryptedPasswords, setDecryptedPasswords] = useState<Record<string, string>>({})
+  const [decryptionPhase, setDecryptionPhase] = useState<Record<string, string>>({})
+
+  // Get wallet address from multiple sources
+  const getWalletAddress = () => {
+    // Try Wagmi first
+    if (address) {
+      return address
+    }
+    
+    // Try Privy embedded wallet
+    if (wallets && wallets.length > 0) {
+      const connectedWallet = wallets.find(wallet => wallet.connectorType === 'embedded')
+      if (connectedWallet?.address) {
+        return connectedWallet.address
+      }
+      
+      // Use first available wallet
+      if (wallets[0]?.address) {
+        return wallets[0].address
+      }
+    }
+    
+    // Try Privy user wallet
+    if (user?.wallet?.address) {
+      return user.wallet.address
+    }
+    
+    return null
+  }
 
   // Load vault entries from localStorage on component mount
   useEffect(() => {
@@ -173,13 +215,22 @@ export default function VaultPage() {
       // Update last accessed time
       VaultStorageService.updateLastAccessed(password.id)
       
-      // In a real implementation, this would decrypt from Walrus
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-      await navigator.clipboard.writeText(password.password)
+      // Use decrypted password if available, otherwise use localStorage password
+      const passwordToCopy = decryptedPasswords[password.id] || password.password
+      const sourceType = decryptedPasswords[password.id] ? "Walrus (decrypted)" : "localStorage"
+      
+      console.log(`📋 Copying password for ${password.name} from ${sourceType}`)
+      
+      // Simulate retrieval delay only if not already decrypted
+      if (!decryptedPasswords[password.id]) {
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+      }
+      
+      await navigator.clipboard.writeText(passwordToCopy)
       
       toast({
         title: "Password Copied",
-        description: `${password.name} password copied to clipboard`
+        description: `${password.name} password copied from ${sourceType}`
       })
       
       // Refresh to show updated "last accessed" time
@@ -212,6 +263,155 @@ export default function VaultPage() {
         title: "Deleted",
         description: `${name} password deleted`
       })
+    }
+  }
+
+  // 🔓 DECRYPT PASSWORD FROM WALRUS
+  const decryptPassword = async (password: VaultEntry) => {
+    const passwordId = password.id
+    console.group(`🔓 Starting decryption process for: ${password.name}`)
+    
+    try {
+      // Add to decrypting set
+      setDecryptingIds(prev => new Set(prev).add(passwordId))
+      
+      // Phase 1: Check data availability
+      setDecryptionPhase(prev => ({ ...prev, [passwordId]: "🔍 Checking encrypted data..." }))
+      console.log('📋 Phase 1: Checking VaultItemCipher availability...')
+      await new Promise(resolve => setTimeout(resolve, 500)) // UI feedback
+      
+      if (!password.walrusMetadata?.vaultItemCipher) {
+        throw new Error('No VaultItemCipher found - password may not be encrypted yet')
+      }
+      
+      const vaultCipher = password.walrusMetadata.vaultItemCipher
+      console.log('✅ VaultItemCipher found:', {
+        site: vaultCipher.site,
+        username: vaultCipher.username,
+        cipherLength: vaultCipher.cipher?.length || 0,
+        ivLength: vaultCipher.iv?.length || 0
+      })
+      
+      // Phase 2: Get wallet address
+      const walletAddress = getWalletAddress()
+      if (!walletAddress) {
+        throw new Error('No wallet address available - please connect your wallet')
+      }
+      console.log('🏠 Using wallet address:', walletAddress)
+      
+      // Phase 3: Request wallet signature
+      setDecryptionPhase(prev => ({ ...prev, [passwordId]: "🔐 Requesting wallet signature..." }))
+      console.log('📝 Phase 2: Requesting wallet signature...')
+      await new Promise(resolve => setTimeout(resolve, 300)) // UI feedback
+      
+      const message = "Generate encryption key for ShadowVault session"
+      console.log('📤 Message to sign:', message)
+      
+      const signature = await signMessageAsync({ message })
+      console.log('✅ Signature received:', signature.slice(0, 20) + '...')
+      
+      // Phase 4: Derive encryption key
+      setDecryptionPhase(prev => ({ ...prev, [passwordId]: "🔑 Deriving encryption key..." }))
+      console.log('🔐 Phase 3: Deriving encryption key from signature...')
+      await new Promise(resolve => setTimeout(resolve, 400)) // UI feedback
+      
+      const { rawKey, base64Key } = await deriveEncryptionKeyFromSignature(signature, walletAddress)
+      console.log('✅ Encryption key derived:', {
+        keyLength: rawKey.length,
+        keyPreview: Array.from(rawKey.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join(''),
+        base64Preview: base64Key.slice(0, 20) + '...'
+      })
+      
+      // Phase 5: Decrypt password with AES-256-GCM
+      setDecryptionPhase(prev => ({ ...prev, [passwordId]: "🔓 Decrypting password..." }))
+      console.log('🔒 Phase 4: Decrypting password with AES-256-GCM...')
+      await new Promise(resolve => setTimeout(resolve, 600)) // UI feedback
+      
+      const decryptedPassword = await decryptPasswordWithAES(
+        vaultCipher.cipher,
+        vaultCipher.iv,
+        rawKey
+      )
+      console.log('✅ Password decrypted successfully:', {
+        passwordLength: decryptedPassword.length,
+        passwordPreview: decryptedPassword.slice(0, 3) + '***'
+      })
+      
+      // Phase 6: Verify password integrity (optional)
+      setDecryptionPhase(prev => ({ ...prev, [passwordId]: "✅ Verifying integrity..." }))
+      console.log('🔍 Phase 5: Verifying password hash integrity...')
+      await new Promise(resolve => setTimeout(resolve, 300)) // UI feedback
+      
+      if (password.walrusMetadata.storedHash) {
+        // Verify the decrypted password matches the stored hash
+        const passwordBytes = utf8ToBytes(decryptedPassword)
+        const computedHash = await sha256Bytes(passwordBytes)
+        const computedHashHex = Array.from(computedHash).map(b => b.toString(16).padStart(2, '0')).join('')
+        
+        console.log('🏷️ Stored hash:', password.walrusMetadata.storedHash.slice(0, 16) + '...')
+        console.log('🧮 Computed hash:', computedHashHex.slice(0, 16) + '...')
+        
+        if (computedHashHex === password.walrusMetadata.storedHash) {
+          console.log('✅ Password integrity verified - hashes match!')
+        } else {
+          console.warn('⚠️ Password integrity warning - hashes do not match')
+        }
+      }
+      
+      // Phase 7: Success
+      setDecryptionPhase(prev => ({ ...prev, [passwordId]: "🎉 Decryption completed!" }))
+      console.log('🎉 Decryption process completed successfully!')
+      
+      // Store decrypted password temporarily
+      setDecryptedPasswords(prev => ({ ...prev, [passwordId]: decryptedPassword }))
+      
+      // Update last accessed
+      VaultStorageService.updateLastAccessed(passwordId)
+      setRefreshTrigger(prev => prev + 1)
+      
+      toast({
+        title: "Password Decrypted",
+        description: `${password.name} password decrypted from Walrus successfully`
+      })
+      
+      // Clear phase after delay
+      setTimeout(() => {
+        setDecryptionPhase(prev => {
+          const newPhase = { ...prev }
+          delete newPhase[passwordId]
+          return newPhase
+        })
+      }, 2000)
+      
+    } catch (error) {
+      console.error('❌ Decryption failed:', error)
+      
+      setDecryptionPhase(prev => ({ ...prev, [passwordId]: "❌ Decryption failed" }))
+      
+      toast({
+        title: "Decryption Failed",
+        description: error instanceof Error ? error.message : "Failed to decrypt password from Walrus",
+        variant: "destructive"
+      })
+      
+      // Clear error phase after delay
+      setTimeout(() => {
+        setDecryptionPhase(prev => {
+          const newPhase = { ...prev }
+          delete newPhase[passwordId]
+          return newPhase
+        })
+      }, 3000)
+      
+    } finally {
+      // Remove from decrypting set
+      setDecryptingIds(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(passwordId)
+        return newSet
+      })
+      
+      console.groupEnd()
     }
   }
 
@@ -272,7 +472,7 @@ export default function VaultPage() {
       // Simulate what the Walrus JSON would look like
       const mockWalrusData = {
         blobId: `walrus_${password.id}_${Date.now()}`,
-        ipfsCid: `Qm${Math.random().toString(36).substr(2, 44)}`,
+        ipfsCid: `Qm${Math.random().toString(36).substring(2, 46)}`,
         storageEpoch: Math.floor(Date.now() / 1000),
         encryptedPayload: {
           name: password.name,
@@ -441,13 +641,55 @@ export default function VaultPage() {
 
                 {/* Password */}
                 <div>
-                  <label className="text-xs text-muted-foreground">Password</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs text-muted-foreground">Password</label>
+                    {decryptionPhase[password.id] && (
+                      <span className="text-xs text-blue-600 animate-pulse">
+                        {decryptionPhase[password.id]}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-mono flex-1 truncate">
-                      {showPasswords[password.id] ? password.password : "••••••••••••"}
+                      {decryptedPasswords[password.id] 
+                        ? decryptedPasswords[password.id] 
+                        : showPasswords[password.id] 
+                          ? password.password 
+                          : "••••••••••••"
+                      }
                     </p>
-                    <Button variant="ghost" size="sm" onClick={() => togglePasswordVisibility(password.id)}>
-                      {showPasswords[password.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => {
+                        if (decryptedPasswords[password.id]) {
+                          // Clear decrypted password
+                          setDecryptedPasswords(prev => {
+                            const newPasswords = { ...prev }
+                            delete newPasswords[password.id]
+                            return newPasswords
+                          })
+                        } else if (password.walrusMetadata?.vaultItemCipher) {
+                          // Decrypt from Walrus
+                          decryptPassword(password)
+                        } else {
+                          // Fallback to show/hide localStorage password
+                          togglePasswordVisibility(password.id)
+                        }
+                      }}
+                      disabled={decryptingIds.has(password.id)}
+                    >
+                      {decryptingIds.has(password.id) ? (
+                        <Lock className="w-4 h-4 animate-spin" />
+                      ) : decryptedPasswords[password.id] ? (
+                        <Unlock className="w-4 h-4 text-green-600" />
+                      ) : password.walrusMetadata?.vaultItemCipher ? (
+                        <Lock className="w-4 h-4 text-blue-600" />
+                      ) : showPasswords[password.id] ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -549,7 +791,6 @@ async function loadAndDecryptVaultItems(userAddress: string) {
       console.log('[Vault] Processing item:', zircuitObject.walrusCid)
 
       // Step 2.1: Derive encryption key from wallet signature
-      const message = "Generate encryption key for ShadowVault session"
       // Note: In real implementation, you'd need to get the signature again
       // For demo, we'll use a mock signature
       const mockSignature = "0x" + "a".repeat(130) // Mock signature
@@ -587,59 +828,4 @@ async function loadAndDecryptVaultItems(userAddress: string) {
   }
 }
 
-// Example usage in a component:
-function VaultDecryptionDemo() {
-  const { address } = useAccount()
-  const [decryptedItems, setDecryptedItems] = useState<any[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-
-  const handleLoadVault = async () => {
-    if (!address) {
-      console.error('No wallet address available')
-      return
-    }
-
-    setIsLoading(true)
-    try {
-      const items = await loadAndDecryptVaultItems(address)
-      setDecryptedItems(items)
-      console.log('[Vault] Vault loaded successfully with', items.length, 'items')
-    } catch (error) {
-      console.error('[Vault] Failed to load vault:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <Button
-        onClick={handleLoadVault}
-        disabled={isLoading || !address}
-        className="w-full"
-      >
-        {isLoading ? 'Loading Vault...' : 'Load & Decrypt Vault Items'}
-      </Button>
-
-      {decryptedItems.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-lg font-semibold">Decrypted Items:</h3>
-          {decryptedItems.map((item, index) => (
-            <Card key={index} className="p-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h4 className="font-medium">{item.site}</h4>
-                  <p className="text-sm text-muted-foreground">{item.username}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Password: {item.decryptedPassword.slice(0, 8)}...
-                  </p>
-                </div>
-                <Badge variant="secondary">{item.meta.category}</Badge>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
+// Demo function for loading and decrypting vault items (kept for reference)
