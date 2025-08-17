@@ -51,7 +51,7 @@ export default function VaultPage() {
 
   // --- Mock Data for Demo Purposes ---
   // TODO: Remove this section once the indexer is fully integrated and stable.
-  const mockPasswords: PasswordEntry[] = [
+  const passwords: PasswordEntry[] = [
     {
       id: "1",
       name: "Netflix",
@@ -91,6 +91,32 @@ export default function VaultPage() {
       isFavorite: true,
       needsUpdate: false,
     },
+    {
+      id: "4",
+      name: "Chase Bank",
+      username: "johndoe123",
+      password: "BankSecure2024$",
+      url: "chase.com",
+      network: "arbitrum",
+      aiStrength: 88,
+      lastAccessed: "3 hours ago",
+      category: "finance",
+      isFavorite: false,
+      needsUpdate: false,
+    },
+    {
+      id: "5",
+      name: "Amazon",
+      username: "john.doe@email.com",
+      password: "ShopSafe456!",
+      url: "amazon.com",
+      network: "optimism",
+      aiStrength: 78,
+      lastAccessed: "1 day ago",
+      category: "shopping",
+      isFavorite: false,
+      needsUpdate: false,
+    },    
   ];
 
   const networkColors = {
@@ -109,25 +135,7 @@ export default function VaultPage() {
     shopping: "🛒",
   };
 
-  // Use live data if available, otherwise fall back to mock data
-  const passwordsToDisplay = (!isLoading && !error && data?.VaultEntry)
-    ? data.VaultEntry.map(entry => ({
-        id: entry.id,
-        name: `Entry #${entry.entryId}`,
-        username: 'Fetched from metadata',
-        password: '••••••••••••',
-        url: `Hash: ${entry.metadataHash.substring(0, 10)}...`,
-        network: "ethereum", // Placeholder
-        aiStrength: 80, // Placeholder
-        lastAccessed: new Date(parseInt(entry.timestamp) * 1000).toLocaleString(),
-        category: "work", // Placeholder
-        isFavorite: false,
-        needsUpdate: false,
-    }))
-    : mockPasswords;
-
-
-  const filteredPasswords = passwordsToDisplay.filter(
+  const filteredPasswords = passwords.filter(
     (password) =>
       password.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       password.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
