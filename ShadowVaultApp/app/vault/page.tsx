@@ -23,8 +23,6 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
-import { useVaultEntries } from "@/hooks/useVaultEntries";
-import { usePrivy } from "@privy-io/react-auth";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface PasswordEntry {
