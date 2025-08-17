@@ -232,12 +232,51 @@ export function useVerifyPasswordStrength() {
   });
 
   const verifyPasswordStrength = (args: any) => {
-    writeContract({
-      address: PASSWORD_VERIFIER_ADDRESS as `0x${string}`,
-      abi: PASSWORD_VERIFIER_ABI,
-      functionName: 'verifyPasswordStrength',
-      args: [args.proof, args.publicInputs, args.user]
-    });
+    console.log("🔍 ===== CONTRACT CALL DEBUGGING =====");
+    console.log("🔍 verifyPasswordStrength called with args:", args);
+    console.log("🔍 args type:", typeof args);
+    console.log("🔍 args keys:", Object.keys(args || {}));
+    
+    if (args.proof) {
+      console.log("🔍 args.proof type:", typeof args.proof);
+      console.log("🔍 args.proof length:", args.proof?.length);
+      console.log("🔍 args.proof constructor:", args.proof?.constructor?.name);
+    }
+    
+    if (args.publicInputs) {
+      console.log("🔍 args.publicInputs type:", typeof args.publicInputs);
+      console.log("🔍 args.publicInputs length:", args.publicInputs?.length);
+      console.log("🔍 args.publicInputs isArray:", Array.isArray(args.publicInputs));
+      console.log("🔍 args.publicInputs[0]:", args.publicInputs?.[0]);
+      console.log("🔍 args.publicInputs[0] type:", typeof args.publicInputs?.[0]);
+    }
+    
+    if (args.user) {
+      console.log("🔍 args.user:", args.user);
+      console.log("🔍 args.user type:", typeof args.user);
+    }
+    
+    console.log("🔍 ===== END CONTRACT CALL DEBUGGING =====");
+    
+    try {
+      console.log("🔍 About to call writeContract with:", {
+        address: PASSWORD_VERIFIER_ADDRESS,
+        functionName: 'verifyPasswordStrength',
+        args: [args.proof, args.publicInputs, args.user]
+      });
+      
+      writeContract({
+        address: PASSWORD_VERIFIER_ADDRESS as `0x${string}`,
+        abi: PASSWORD_VERIFIER_ABI,
+        functionName: 'verifyPasswordStrength',
+        args: [args.proof, args.publicInputs, args.user]
+      });
+      
+      console.log("🔍 writeContract called successfully");
+    } catch (error) {
+      console.error("🔍 Error in writeContract call:", error);
+      throw error;
+    }
   };
 
   return {
@@ -319,10 +358,31 @@ export function useUserProofCount(userAddress: string) {
  * Utility function to prepare proof data for on-chain verification
  */
 export function prepareProofForVerification(proof: any) {
-  console.log("🔍 Preparing proof for verification:", proof);
-  console.log("🔍 proof.noirProof:", proof.noirProof);
-  console.log("🔍 proof.noirProof type:", typeof proof.noirProof);
-  console.log("🔍 proof.noirProof keys:", Object.keys(proof.noirProof || {}));
+  console.log("🔍 ===== DEBUGGING PROOF STRUCTURE =====");
+  console.log("🔍 Full proof object:", proof);
+  console.log("🔍 proof type:", typeof proof);
+  console.log("🔍 proof keys:", Object.keys(proof || {}));
+  
+  if (proof) {
+    console.log("🔍 proof.noirProof:", proof.noirProof);
+    console.log("🔍 proof.noirProof type:", typeof proof.noirProof);
+    if (proof.noirProof) {
+      console.log("🔍 proof.noirProof keys:", Object.keys(proof.noirProof));
+      console.log("🔍 proof.noirProof length:", proof.noirProof.length);
+    }
+    
+    console.log("🔍 proof.publicInputs:", proof.publicInputs);
+    console.log("🔍 proof.publicInputs type:", typeof proof.publicInputs);
+    if (proof.publicInputs) {
+      console.log("🔍 proof.publicInputs length:", proof.publicInputs.length);
+      console.log("🔍 proof.publicInputs isArray:", Array.isArray(proof.publicInputs));
+    }
+    
+    console.log("🔍 proof.strength:", proof.strength);
+    console.log("🔍 proof.circuitHash:", proof.circuitHash);
+    console.log("🔍 proof.timestamp:", proof.timestamp);
+  }
+  console.log("🔍 ===== END DEBUGGING =====");
   
   // Check if proof has the expected structure
   if (!proof || !proof.noirProof) {
@@ -342,6 +402,11 @@ export function prepareProofForVerification(proof: any) {
     proofBytes = proof.noirProof;
   }
   
+  // Convert Uint8Array to hex string for contract compatibility
+  if (proofBytes instanceof Uint8Array) {
+    proofBytes = '0x' + Array.from(proofBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  
   // Check if publicInputs exists and is an array
   if (!proof.publicInputs || !Array.isArray(proof.publicInputs)) {
     throw new Error("Invalid proof structure: missing or invalid publicInputs");
@@ -349,8 +414,30 @@ export function prepareProofForVerification(proof: any) {
   
   // Convert public inputs to bytes32 array
   const publicInputs = proof.publicInputs.map((input: any) => {
-    // Convert to bytes32 format
-    return `0x${input.toString(16).padStart(64, '0')}` as `0x${string}`;
+    // Handle different input formats
+    let hexString: string;
+    
+    if (typeof input === 'string') {
+      // If it's already a hex string, use it directly
+      if (input.startsWith('0x')) {
+        hexString = input;
+      } else {
+        // If it's a string without 0x, add it
+        hexString = `0x${input}`;
+      }
+    } else {
+      // If it's a number or other type, convert to hex
+      hexString = `0x${input.toString(16).padStart(64, '0')}`;
+    }
+    
+    // Ensure it's exactly 66 characters (0x + 64 hex chars)
+    if (hexString.length < 66) {
+      hexString = hexString + '0'.repeat(66 - hexString.length);
+    } else if (hexString.length > 66) {
+      hexString = hexString.substring(0, 66);
+    }
+    
+    return hexString as `0x${string}`;
   });
 
   console.log("✅ Proof prepared successfully:", {

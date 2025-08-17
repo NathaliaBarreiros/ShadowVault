@@ -23,6 +23,7 @@ import {
   CheckCircle,
   Copy,
   Lock,
+  ExternalLink,
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -47,7 +48,8 @@ export default function AddPasswordPage() {
     verifyPasswordStrength, 
     isPending: isVerifyingOnChain, 
     isSuccess: onChainVerificationSuccess,
-    error: onChainError 
+    error: onChainError,
+    hash: transactionHash
   } = useVerifyPasswordStrength()
   
   const { 
@@ -221,9 +223,11 @@ export default function AddPasswordPage() {
         userAddress: address
       })
       
-      // Call the smart contract
+      // Call the smart contract - pass arguments directly, not wrapped in args object
       verifyPasswordStrength({
-        args: [proof, publicInputs, address]
+        proof: proof,
+        publicInputs: publicInputs,
+        user: address
       })
       
       setOnChainVerificationStatus("Transaction sent! Waiting for confirmation...")
@@ -256,9 +260,13 @@ export default function AddPasswordPage() {
       
       console.log("🔗 Committing vault item to Zircuit testnet...")
       
-      // Commit to smart contract
+      // Commit to smart contract - pass arguments directly, not wrapped in args object
       commitVaultItem({
-        args: [itemIdHash, itemCommitment, itemCipherCID, proof, publicInputs]
+        itemIdHash: itemIdHash,
+        itemCommitment: itemCommitment,
+        itemCipherCID: itemCipherCID,
+        proof: proof,
+        publicInputs: publicInputs
       })
       
     } catch (error) {
@@ -522,13 +530,36 @@ export default function AddPasswordPage() {
                           <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                             <div className="flex items-start gap-2">
                               <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-                              <div>
+                              <div className="flex-1">
                                 <p className="text-sm font-medium text-green-800">
                                   ✅ Verified on Zircuit Testnet!
                                 </p>
                                 <p className="text-sm text-green-700">
                                   Password strength proof verified on-chain
                                 </p>
+                                
+                                {transactionHash && (
+                                  <div className="mt-2 pt-2 border-t border-green-200">
+                                    <p className="text-xs text-green-600 mb-1">Transaction Hash:</p>
+                                    <div className="flex items-center gap-2">
+                                      <code className="text-xs bg-green-100 px-2 py-1 rounded text-green-800 font-mono">
+                                        {transactionHash.slice(0, 10)}...{transactionHash.slice(-8)}
+                                      </code>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 px-2 text-xs text-green-600 hover:text-green-800"
+                                        onClick={() => {
+                                          const explorerUrl = `https://sepolia.basescan.org/tx/${transactionHash}`;
+                                          window.open(explorerUrl, '_blank');
+                                        }}
+                                      >
+                                        <ExternalLink className="w-3 h-3 mr-1" />
+                                        View
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -543,7 +574,14 @@ export default function AddPasswordPage() {
                                   ❌ On-Chain Verification Failed
                                 </p>
                                 <p className="text-sm text-red-700">
-                                  {onChainError.message}
+                                  {(() => {
+                                    console.log("🔍 onChainError object:", onChainError);
+                                    console.log("🔍 onChainError type:", typeof onChainError);
+                                    console.log("🔍 onChainError keys:", Object.keys(onChainError || {}));
+                                    console.log("🔍 onChainError.message:", onChainError.message);
+                                    console.log("🔍 onChainError.message type:", typeof onChainError.message);
+                                    return onChainError.message || "Unknown error occurred";
+                                  })()}
                                 </p>
                               </div>
                             </div>
