@@ -1,0 +1,6 @@
+[package]
+name = "password_integrity"
+type = "bin"
+authors = ["ShadowVault Team"]
+
+[dependencies]
