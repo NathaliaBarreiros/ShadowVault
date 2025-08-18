@@ -3,6 +3,9 @@
  * Manages password entries in browser localStorage with encryption
  */
 
+import { PasswordIntegrityZK, IntegrityProofResult } from './password-integrity-zk';
+import { decryptPasswordWithAES, base64ToBytes } from './encryption';
+
 export interface VaultEntry {
   id: string
   name: string
@@ -37,6 +40,7 @@ export interface VaultEntry {
       username: string
       cipher: string
       iv: string
+      encryptionKey: string // base64 encryption key
       meta: any
     }
   }
@@ -174,6 +178,8 @@ export class VaultStorageService {
    * Update Walrus metadata for an entry
    */
   static updateWalrusMetadata(id: string, metadata: VaultEntry['walrusMetadata']): VaultEntry | null {
+    if (!metadata) return null;
+    
     return this.updateEntry(id, {
       walrusMetadata: {
         ...metadata,
@@ -290,6 +296,155 @@ export class VaultStorageService {
     return this.getEntries().filter(entry => entry.isFavorite)
   }
 
+  /**
+   * Recover password with ZK integrity verification
+   * This method decrypts the password and verifies its integrity using ZK proofs
+   */
+  static async recoverPasswordWithIntegrityVerification(
+    vaultEntry: VaultEntry,
+    zircuitData: {
+      storedHash: string;
+      contractAddress: string;
+      networkChainId: number;
+    }
+  ): Promise<{
+    password: string;
+    integrityVerified: boolean;
+    proof?: any;
+    publicInputs?: any;
+    error?: string;
+  }> {
+    try {
+      console.log('🔐 Starting password recovery with integrity verification...');
+      console.log('📄 Vault entry:', vaultEntry);
+      console.log('⛓️ Zircuit data:', zircuitData);
+
+      // Initialize ZK system
+      const integrityZK = new PasswordIntegrityZK();
+      await integrityZK.initialize();
+
+      // Decrypt password from Walrus cipher data
+      let decryptedPassword: string;
+      
+      if (vaultEntry.walrusMetadata?.vaultItemCipher) {
+        // Use real Walrus cipher data if available
+        const { cipher, iv, encryptionKey } = vaultEntry.walrusMetadata.vaultItemCipher;
+        
+        if (!cipher || !iv || !encryptionKey) {
+          console.log('⚠️ Incomplete Walrus cipher data, falling back to stored password');
+          decryptedPassword = vaultEntry.password;
+        } else {
+
+          console.log('🔓 Decrypting password using Walrus cipher data...');
+          console.log('🔐 Cipher length:', cipher.length);
+          console.log('🔑 IV length:', iv.length);
+          console.log('🗝️ Encryption key length:', encryptionKey.length);
+
+          // Convert base64 encryption key to Uint8Array
+          const keyBytes = base64ToBytes(encryptionKey);
+          
+          // Decrypt using AES-GCM
+          decryptedPassword = await decryptPasswordWithAES(cipher, iv, keyBytes);
+          
+          console.log('✅ Password decrypted successfully from Walrus data');
+        }
+      } else {
+        // Fallback to stored password (for testing)
+        console.log('⚠️ No Walrus cipher data found, using stored password as fallback');
+        decryptedPassword = vaultEntry.password;
+      }
+
+      console.log('🔓 Decrypted password:', decryptedPassword);
+
+      // 🧪 DEBUGGING: Compare hashes to verify they should match
+      console.log('🔍 === HASH COMPARISON DEBUG ===');
+      
+      // Compute hash of decrypted password
+      const passwordBytes = new TextEncoder().encode(decryptedPassword);
+      const computedHashBuffer = await crypto.subtle.digest('SHA-256', passwordBytes);
+      const computedHashArray = new Uint8Array(computedHashBuffer);
+      const computedHashHex = Array.from(computedHashArray).map(b => b.toString(16).padStart(2, '0')).join('');
+      
+      console.log('🔐 Password used:', decryptedPassword);
+      console.log('🧮 Computed hash from password:', computedHashHex);
+      console.log('🏷️ Stored hash from Zircuit:', zircuitData.storedHash);
+      console.log('🎯 Hashes match:', computedHashHex === zircuitData.storedHash);
+      
+      if (computedHashHex === zircuitData.storedHash) {
+        console.log('✅ Hash verification: Password integrity confirmed before ZK proof');
+      } else {
+        console.log('❌ Hash verification: Password integrity mismatch - ZK proof will fail');
+        console.log('📏 Computed hash length:', computedHashHex.length);
+        console.log('📏 Stored hash length:', zircuitData.storedHash.length);
+      }
+      console.log('🔍 === END HASH COMPARISON ===');
+
+      // Generate ZK integrity proof
+      const integrityResult = await integrityZK.generateIntegrityProof(
+        decryptedPassword,
+        zircuitData.storedHash
+      );
+
+      if (!integrityResult.success) {
+        throw new Error(`Integrity verification failed: ${integrityResult.error}`);
+      }
+
+      // Verify the proof locally (optional, for extra security)
+      const isProofValid = await integrityZK.verifyProof(
+        integrityResult.proof,
+        integrityResult.publicInputs
+      );
+
+      if (!isProofValid) {
+        throw new Error('ZK proof verification failed');
+      }
+
+      // Update last accessed time
+      this.updateLastAccessed(vaultEntry.id);
+
+      console.log('✅ Password recovery with integrity verification completed successfully');
+
+      // Return the decrypted password with integrity confirmation
+      return {
+        password: decryptedPassword,
+        integrityVerified: true,
+        proof: integrityResult.proof,
+        publicInputs: integrityResult.publicInputs
+      };
+
+    } catch (error) {
+      console.error('❌ Password recovery with integrity verification failed:', error);
+      return {
+        password: '',
+        integrityVerified: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  /**
+   * Test the ZK integrity verification system
+   */
+  static async testIntegritySystem(): Promise<boolean> {
+    try {
+      console.log('🧪 Testing ZK integrity verification system...');
+      
+      const integrityZK = new PasswordIntegrityZK();
+      const testResult = await integrityZK.testCircuit();
+      
+      if (testResult) {
+        console.log('✅ ZK integrity system test passed');
+        return true;
+      } else {
+        console.log('❌ ZK integrity system test failed');
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ ZK integrity system test error:', error);
+      return false;
+    }
+  }
+
   // Private helper methods
 
   private static generateId(): string {
@@ -337,12 +492,24 @@ export class VaultStorageService {
   }
 }
 
+// Helper function to compute SHA-256 hash
+async function computePasswordHash(password: string): Promise<string> {
+  const passwordBytes = new TextEncoder().encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', passwordBytes);
+  const hashArray = new Uint8Array(hashBuffer);
+  return Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // Initialize with some sample data if storage is empty
-export function initializeSampleData(): void {
+export async function initializeSampleData(): Promise<void> {
   const existing = VaultStorageService.getEntries()
   
   if (existing.length === 0) {
     console.log('[VaultStorage] Initializing with sample data...')
+    
+    // Calculate the correct hash for "OldPassword456"
+    const gitHubPasswordHash = await computePasswordHash("OldPassword456");
+    console.log('[VaultStorage] Computed GitHub password hash:', gitHubPasswordHash);
     
     const sampleEntries = [
       {
@@ -362,12 +529,40 @@ export function initializeSampleData(): void {
         username: "johndoe",
         password: "OldPassword456",
         url: "github.com",
-        network: "polygon" as const,
+        network: "zircuit" as const,
         aiStrength: 45,
         lastAccessed: "15 minutes ago",
         category: "work" as const,
         isFavorite: false,
         needsUpdate: true,
+        walrusMetadata: {
+          blobId: "test-blob-github",
+          ipfsCid: "QmTestGitHub",
+          storageEpoch: Date.now(),
+          encryptionKey: "dGVzdC1lbmNyeXB0aW9uLWtleQ==", // base64 encoded test key
+          uploadedAt: new Date().toISOString(),
+          blockchainTxHash: "0xtest123",
+          contractAddress: "0x577dc63554BF7531f75AF602896209fFe87d51E8",
+          networkChainId: 48898,
+          // Hash of "OldPassword456" -> computed dynamically above
+          storedHash: gitHubPasswordHash,
+          walrusCid: "QmTestGitHubWalrus",
+          vaultItemCipher: {
+            v: 1,
+            site: "GitHub",
+            username: "johndoe",
+            cipher: "dGVzdC1jaXBoZXItZGF0YQ==", // mock cipher - base64 encoded "test-cipher-data"
+            iv: "dGVzdC1pdg==", // mock IV - base64 encoded "test-iv"
+            encryptionKey: "dGVzdC1lbmNyeXB0aW9uLWtleQ==", // same as above
+            meta: {
+              url: "github.com",
+              notes: "Test GitHub account",
+              category: "work",
+              network: "zircuit",
+              timestamp: new Date().toISOString()
+            }
+          }
+        }
       },
       {
         name: "LinkedIn",

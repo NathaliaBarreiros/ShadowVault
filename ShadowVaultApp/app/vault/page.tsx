@@ -47,7 +47,7 @@ import {
 } from "@/lib/encryption"
 
 import { Skeleton } from "@/components/ui/skeleton"
-import { VaultStorageService, initializeSampleData, type VaultEntry } from "@/lib/vault-storage"
+import { VaultStorageService, type VaultEntry } from "@/lib/vault-storage"
 import { toast } from "@/hooks/use-toast"
 
 export default function VaultPage() {
@@ -170,16 +170,7 @@ export default function VaultPage() {
     })
   }
 
-  const initializeSampleForTesting = () => {
-    if (confirm('Initialize sample data for testing?')) {
-      initializeSampleData()
-      setRefreshTrigger(prev => prev + 1)
-      toast({
-        title: "Sample Data Added",
-        description: "Test data has been initialized"
-      })
-    }
-  }
+
 
   const networkColors = {
     ethereum: "bg-blue-100 text-blue-800",
@@ -415,6 +406,140 @@ export default function VaultPage() {
     }
   }
 
+  // 🔐 VERIFY PASSWORD INTEGRITY WITH ZK
+  const verifyPasswordIntegrity = async (password: VaultEntry) => {
+    const passwordId = password.id
+    console.group(`🔐 Starting ZK integrity verification for: ${password.name}`)
+    
+    try {
+      // Add to decrypting set (reuse the same UI state)
+      setDecryptingIds(prev => new Set(prev).add(passwordId))
+      
+      // Phase 1: Check if we have the necessary data
+      setDecryptionPhase(prev => ({ ...prev, [passwordId]: "🔍 Preparing ZK verification..." }))
+      console.log('📋 Phase 1: Checking data availability...')
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Check if we have stored hash from Zircuit
+      if (!password.walrusMetadata?.storedHash) {
+        throw new Error('No stored hash found - password may not be on Zircuit yet')
+      }
+
+      console.log('✅ Found stored hash from Zircuit:', password.walrusMetadata.storedHash.slice(0, 16) + '...')
+
+      // Get decrypted password (either already decrypted or decrypt now)
+      let decryptedPassword = decryptedPasswords[password.id]
+      
+      if (!decryptedPassword) {
+        // If not already decrypted, we need to decrypt first
+        setDecryptionPhase(prev => ({ ...prev, [passwordId]: "🔓 Decrypting for verification..." }))
+        await new Promise(resolve => setTimeout(resolve, 300))
+        
+        if (password.walrusMetadata?.vaultItemCipher) {
+          const walletAddress = getWalletAddress()
+          if (!walletAddress) {
+            throw new Error('No wallet address available')
+          }
+
+          const message = "Generate encryption key for ShadowVault session"
+          const signature = await signMessageAsync({ message })
+          const { rawKey } = await deriveEncryptionKeyFromSignature(signature, walletAddress)
+          
+          decryptedPassword = await decryptPasswordWithAES(
+            password.walrusMetadata.vaultItemCipher.cipher,
+            password.walrusMetadata.vaultItemCipher.iv,
+            rawKey
+          )
+          
+          // Store for future use
+          setDecryptedPasswords(prev => ({ ...prev, [passwordId]: decryptedPassword }))
+        } else {
+          // Fallback to stored password
+          decryptedPassword = password.password
+        }
+      }
+
+      // Phase 2: Initialize ZK system
+      setDecryptionPhase(prev => ({ ...prev, [passwordId]: "🔧 Initializing ZK system..." }))
+      console.log('🔐 Phase 2: Initializing ZK system...')
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Phase 3: Generate ZK integrity proof
+      setDecryptionPhase(prev => ({ ...prev, [passwordId]: "🧮 Generating ZK proof..." }))
+      console.log('🔐 Phase 3: Generating ZK integrity proof...')
+      await new Promise(resolve => setTimeout(resolve, 300))
+
+      const zircuitData = {
+        storedHash: password.walrusMetadata.storedHash,
+        contractAddress: password.walrusMetadata.contractAddress || "0x577dc63554BF7531f75AF602896209fFe87d51E8",
+        networkChainId: password.walrusMetadata.networkChainId || 48898
+      }
+
+      const result = await VaultStorageService.recoverPasswordWithIntegrityVerification(
+        password,
+        zircuitData
+      )
+
+      if (result.integrityVerified) {
+        // Phase 4: Success
+        setDecryptionPhase(prev => ({ ...prev, [passwordId]: "✅ ZK verification passed!" }))
+        console.log('🎉 ZK integrity verification completed successfully!')
+        
+        toast({
+          title: "Integrity Verified ✅",
+          description: `${password.name} password integrity verified with Zero-Knowledge proof`
+        })
+        
+        console.log('🔍 ZK Proof Details:', {
+          proofLength: result.proof?.length || 0,
+          publicInputs: result.publicInputs,
+          storedHash: zircuitData.storedHash.slice(0, 16) + '...'
+        })
+      } else {
+        throw new Error(result.error || 'ZK integrity verification failed')
+      }
+
+      // Clear phase after delay
+      setTimeout(() => {
+        setDecryptionPhase(prev => {
+          const newPhase = { ...prev }
+          delete newPhase[passwordId]
+          return newPhase
+        })
+      }, 2000)
+      
+    } catch (error) {
+      console.error('❌ ZK integrity verification failed:', error)
+      
+      setDecryptionPhase(prev => ({ ...prev, [passwordId]: "❌ ZK verification failed" }))
+      
+      toast({
+        title: "Integrity Verification Failed",
+        description: error instanceof Error ? error.message : "ZK proof generation failed",
+        variant: "destructive"
+      })
+      
+      // Clear error phase after delay
+      setTimeout(() => {
+        setDecryptionPhase(prev => {
+          const newPhase = { ...prev }
+          delete newPhase[passwordId]
+          return newPhase
+        })
+      }, 3000)
+      
+    } finally {
+      // Remove from decrypting set
+      setDecryptingIds(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(passwordId)
+        return newSet
+      })
+      
+      console.groupEnd()
+    }
+  }
+
   const logWalrusInfo = (password: VaultEntry) => {
     console.group(`🐋 Walrus Info for ${password.name}`)
     
@@ -548,6 +673,7 @@ export default function VaultPage() {
                 <Info className="w-4 h-4 mr-2" />
                 Debug
               </Button>
+
               <Link href="/vault/add">
                 <Button className="bg-primary hover:bg-primary/90">
                   <Plus className="w-4 h-4 mr-2" />
@@ -748,6 +874,29 @@ export default function VaultPage() {
                       Walrus
                     </Button>
                   </div>
+
+                  {/* ZK Integrity Verification Button */}
+                  {password.walrusMetadata?.storedHash && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => verifyPasswordIntegrity(password)}
+                      disabled={decryptingIds.has(password.id)}
+                      className="w-full mt-2 border-green-200 hover:border-green-300 text-green-700 hover:text-green-800"
+                    >
+                      {decryptingIds.has(password.id) ? (
+                        <>
+                          <Sparkles className="w-3 h-3 mr-1 animate-spin" />
+                          ZK Verifying...
+                        </>
+                      ) : (
+                        <>
+                          <Shield className="w-3 h-3 mr-1" />
+                          ZK Verify Integrity
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
