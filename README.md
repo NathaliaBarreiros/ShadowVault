@@ -214,3 +214,4 @@ MIT — see `LICENSE`.
 - **Zircuit** (L2 anchoring)  
 - **Walrus** (decentralized ciphertext + proof storage)  
 - **Privy** (wallet/identity)  
+- 
